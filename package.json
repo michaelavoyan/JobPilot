@@ -1,0 +1,37 @@
+{
+  "name": "jobpilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "JobPilot — personal job-search agent: ingest postings, filter, score against a profile, emit a digest.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "sources": "node src/cli.ts sources",
+    "init": "node src/cli.ts init",
+    "ui": "node src/server.ts",
+    "profile": "node src/cli.ts profile",
+    "collect": "node src/cli.ts collect",
+    "score": "node src/cli.ts score",
+    "digest": "node src/cli.ts digest",
+    "run": "node src/cli.ts run",
+    "discover": "node src/cli.ts discover",
+    "dump": "node src/cli.ts dump",
+    "feedback": "node src/cli.ts feedback",
+    "eval": "node src/cli.ts eval",
+    "stats": "node src/cli.ts stats",
+    "discover-web": "node src/cli.ts discover-web",
+    "funnel": "node src/cli.ts funnel",
+    "schedule": "node src/cli.ts schedule",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "unpdf": "^2.2.1",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.1"
+  }
+}
