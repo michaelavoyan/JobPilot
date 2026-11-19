@@ -1,0 +1,50 @@
+# JobPilot profile.
+#
+# `npm run init` copies this to ./config/profile.yaml, which is gitignored:
+# it becomes your input, never part of the repository. Generate it from a CV
+# with `npm run profile -- cv.pdf`, or fill it in by hand.
+#
+# JobPilot refuses to run until name and total_years are set, because a silent
+# default would produce confidently wrong scores.
+
+name: Your Name
+email: ""
+phone: ""
+country: IL
+
+experience:
+  total_years: 0
+  management_years: 0
+  max_team_size: 0
+  employment_status: open_to_work
+
+headline: ""
+current_title: ""
+previous_titles: []
+
+domains: []
+stack: []
+ai_practice: []
+people_management: []
+
+languages: {}
+education: {}
+military: {}
+
+# Filled in by `npm run profile` from your CV. Empty means "unknown".
+citizenship: []
+
+# null disables the salary filter. A wrong floor silently deletes jobs,
+# so set it deliberately in config/profile.yaml.
+comp_floor: null
+
+locations:
+  allowed: []
+  regions: []
+  commute_max_minutes: 60
+  remote_ok: true
+  hybrid_ok: true
+  onsite_only_ok: false
+
+# Drop postings requiring security clearance or citizenship.
+authorization_must_pass: true

@@ -1,0 +1,117 @@
+# Israel market configuration.
+# Selected at setup with: npm run init -- --market il
+#
+# Everything country-specific lives in a market file. A second country is
+# another file like this one, not a code change.
+
+country: IL
+currency: ILS
+comp_period: month          # Israeli salaries are quoted monthly gross
+country_names:
+  - "Israel"
+  - "ישראל"
+
+# Every string that represents a currency in a posting. Salary parsing is
+# driven entirely by this table, so a second country adds markers, not code.
+currency_markers:
+  ILS: ["₪", 'ש"ח', "ש״ח", "ils", "nis", "שקל", "שקלים"]
+  USD: ["$", "usd"]
+  EUR: ["€", "eur"]
+
+sources:
+  comeet:
+    enabled: true
+    note: "Official Careers API. Dominant ATS for Israeli tech."
+  greenhouse:
+    enabled: true
+  lever:
+    enabled: true
+  ashby:
+    enabled: true
+  remoteok:
+    enabled: true
+    note: "Global remote feed. Noisy; filters do the work."
+  adzuna:
+    enabled: false
+    note: "Adzuna does not cover Israel. Country-wide Israeli coverage is only available from the local boards, which have no public API."
+  alljobs:
+    enabled: false
+    note: "No official API. Scraping only — leave off until you decide on the ToS tradeoff."
+  drushim:
+    enabled: false
+    note: "No official API. Scraping only."
+
+# Postings matching these are dropped outright when
+# profile.authorization_must_pass is true.
+clearance_patterns:
+  - "סיווג ביטחוני"
+  - "אזרחות ישראלית"
+  - "אזרח/ית ישראל"
+  - "security clearance"
+  - "israeli citizenship"
+  - "citizenship required"
+
+# Seniority traps common in the Israeli market.
+exclude_title_patterns:
+  - "\\bintern\\b"
+  - "\\bjunior\\b"
+  - "\\bstudent\\b"
+  - "\\bמתמחה\\b"
+  - "\\bג'וניור\\b"
+
+# Used only for the Hebrew/no-latin fallback during location matching.
+city_aliases:
+  "תל אביב": "Tel Aviv"
+  "תל-אביב": "Tel Aviv"
+  "רמת גן": "Ramat Gan"
+  "הרצליה": "Herzliya"
+  "פתח תקווה": "Petah Tikva"
+  "פתח תקוה": "Petah Tikva"
+  "רעננה": "Ra'anana"
+  "בני ברק": "Bnei Brak"
+  "חולון": "Holon"
+  "נתניה": "Netanya"
+  "חיפה": "Haifa"
+  "ירושלים": "Jerusalem"
+  "רחובות": "Rehovot"
+  "גבעתיים": "Givatayim"
+  "remote": "Remote"
+  "מרחוק": "Remote"
+  "היברידי": "Hybrid"
+
+# A remote posting restricted to one of these regions is not remote for a
+# candidate in this market. "Worldwide" / "anywhere" overrides the list.
+remote_deny_regions:
+  - "united states"
+  - "usa"
+  - "u.s."
+  - "us only"
+  - "us-based"
+  - "canada"
+  - "emea"
+  - "apac"
+  - "latam"
+  - "europe"
+  - "united kingdom"
+  - "india"
+  - "germany"
+  - "poland"
+  - "brazil"
+  - "singapore"
+  - "australia"
+  - "japan"
+  - "portugal"
+  - "spain"
+  - "ireland"
+  - "netherlands"
+  - "france"
+  - "sweden"
+  - "denmark"
+  - "norway"
+  - "finland"
+  - "switzerland"
+  - "italy"
+  - "cyprus"
+  - "greece"
+  - "uae"
+  - "turkey"

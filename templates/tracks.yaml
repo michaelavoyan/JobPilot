@@ -1,0 +1,87 @@
+# Three genuinely different searches. One blended ranking collapses them,
+# so each track is filtered and scored separately against the same profile.
+
+tracks:
+  # --- B: the volume track. Highest expected value. ---
+  b_senior_em:
+    label: "Senior EM / Group Lead"
+    enabled: true
+    weight: 1.0
+    order: 1
+    brief: >
+      A hands-on-but-managerial engineering leadership role with roughly 5-20
+      reports, owning a mobile, platform, or client-side group. Must be a real
+      people-management position, not a tech-lead-with-one-report role.
+    title_include:
+      - engineering manager
+      - group lead
+      # Match titles in the language your market publishes in. English-only
+      # keywords silently drop postings whose title is Hebrew, German, etc.
+      - engineering director
+      - r&d manager
+      - development manager
+      - software manager
+      - head of mobile
+      - head of engineering
+      - mobile lead
+      - client-side lead
+      - full stack lead
+      - team lead
+    title_exclude:
+      - intern
+      - junior
+      - student
+      - "vp "
+      - chief
+      - "business development"
+
+  # --- A: fewer roles, higher ceiling. ---
+  a_director:
+    label: "Director / Head of Engineering"
+    enabled: true
+    weight: 0.9
+    order: 3
+    brief: >
+      A Director or Head of Engineering role owning multiple teams or a whole
+      engineering org (30+ people), with budget and strategy responsibility.
+      Below-30-person orgs usually mislabel this; score down.
+    title_include:
+      - director
+      - head of engineering
+      - head of r&d
+      - vp engineering
+      - engineering director
+    title_exclude:
+      - intern
+      - junior
+      - student
+      - "director of sales"
+      - "director of marketing"
+
+  # --- C: your differentiator, but a tiny pool. ---
+  c_ai_lead:
+    label: "AI Transformation / AI Engineering Enablement"
+    enabled: true
+    weight: 1.1
+    order: 2
+    brief: >
+      A role whose core purpose is introducing AI-assisted development into an
+      engineering org: agentic workflows, internal tooling, developer
+      productivity, AI platform or AI enablement. Must be a leadership or
+      senior-staff role, not an IC prompt-engineering gig.
+    title_include:
+      - ai engineering
+      - ai platform
+      - ai lead
+      - ai transformation
+      - head of ai
+      - developer productivity
+      - developer experience
+      - engineering enablement
+      - ai adoption
+    title_exclude:
+      - intern
+      - junior
+      - student
+      - data scientist
+      - "sales"

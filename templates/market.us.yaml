@@ -1,0 +1,91 @@
+# United States market configuration.
+# Selected at setup with: npm run init -- --market us
+#
+# Everything country-specific lives in a market file. A second country is
+# another file like this one, not a code change.
+
+country: US
+currency: USD
+comp_period: year
+country_names:
+  - "United States"
+  - "USA"
+  - "U.S."
+           # US salaries are quoted annually
+adzuna_country: us          # country code for the Adzuna feed
+
+currency_markers:
+  USD: ["US$", "$", "usd", "dollars"]
+  CAD: ["C$", "cad"]
+
+sources:
+  greenhouse:
+    enabled: true
+  lever:
+    enabled: true
+  ashby:
+    enabled: true
+  remoteok:
+    enabled: true
+    note: "Global remote feed. Noisy; filters do the work."
+  adzuna:
+    enabled: true
+    note: "Country-wide feed. Needs ADZUNA_APP_ID and ADZUNA_APP_KEY; covers us, uk, de, fr and 12 more."
+  comeet:
+    enabled: false
+    note: "Israeli-centric ATS. Enable only if your US targets use it."
+  indeed:
+    enabled: false
+    note: "Publisher API is partner-only; approval is unlikely for a personal tool."
+
+# Dropped when profile.authorization_must_pass is true. US postings state these
+# far more often than Israeli ones, and almost always in boilerplate.
+clearance_patterns:
+  - "security clearance"
+  - "active clearance"
+  - "top secret"
+  - "ts/sci"
+  - "public trust"
+  - "us citizenship"
+  - "u\\.s\\. citizenship"
+  - "must be a us citizen"
+  - "citizenship is required"
+  - "itar"
+  - "export control"
+
+exclude_title_patterns:
+  - "\\bintern\\b"
+  - "\\binternship\\b"
+  - "\\bjunior\\b"
+  - "\\bnew grad\\b"
+  - "\\bentry[ -]level\\b"
+  - "\\bstudent\\b"
+
+# Keep entries unambiguous: matching is substring-based, so a short alias like
+# "la" or "dc" would capture Atlanta and Washington County alike.
+city_aliases:
+  "new york city": "New York"
+  "san francisco bay area": "San Francisco Bay Area"
+  "silicon valley": "San Francisco Bay Area"
+  "washington dc": "Washington, DC"
+  "remote": "Remote"
+  "work from home": "Remote"
+  "hybrid": "Hybrid"
+
+# A remote posting restricted to one of these regions is not remote for a
+# candidate in this market. "Worldwide" / "anywhere" overrides the list.
+remote_deny_regions:
+  - "emea"
+  - "apac"
+  - "latam"
+  - "europe"
+  - "united kingdom"
+  - "india"
+  - "israel"
+  - "germany"
+  - "poland"
+  - "brazil"
+  - "canada"
+  - "australia"
+  - "singapore"
+  - "japan"
