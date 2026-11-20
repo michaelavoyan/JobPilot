@@ -56,6 +56,18 @@ CREATE TABLE IF NOT EXISTS decisions (
   updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS boards (
+  ats         TEXT NOT NULL,
+  ident       TEXT NOT NULL,
+  token       TEXT,
+  name        TEXT NOT NULL,
+  open_roles  INTEGER,
+  verified_at TEXT,
+  misses      INTEGER NOT NULL DEFAULT 0,
+  enabled     INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (ats, ident)
+);
+
 CREATE TABLE IF NOT EXISTS runs (
   id         TEXT PRIMARY KEY,
   started    TEXT NOT NULL,
@@ -223,6 +235,83 @@ export function markEvaluated(db: Db, ids: string[]): void {
 export function allJobs(db: Db, limit = 1000): Job[] {
   const rows = db.prepare("SELECT * FROM jobs ORDER BY first_seen DESC LIMIT ?").all(limit) as Row[];
   return rows.map(rowToJob);
+}
+
+export interface Board {
+  ats: string;
+  ident: string;
+  token?: string;
+  name: string;
+  openRoles?: number;
+  verifiedAt?: string;
+  misses: number;
+  enabled: boolean;
+}
+
+/**
+ * The tenant directory. ATS platforms have no index of their customers, so
+ * discovery finds them and this table remembers them; collect reads it instead
+ * of requiring a hand-maintained list.
+ */
+export function upsertBoards(
+  db: Db,
+  boards: { ats: string; ident: string; token?: string; name: string; openRoles?: number }[],
+): number {
+  if (!boards.length) return 0;
+  const stmt = db.prepare(`
+    INSERT INTO boards (ats, ident, token, name, open_roles, verified_at, misses, enabled)
+    VALUES (?, ?, ?, ?, ?, ?, 0, 1)
+    ON CONFLICT(ats, ident) DO UPDATE SET
+      token = COALESCE(excluded.token, boards.token),
+      name = excluded.name,
+      open_roles = excluded.open_roles,
+      verified_at = excluded.verified_at,
+      misses = 0,
+      enabled = 1
+  `);
+  const at = nowIso();
+  let n = 0;
+  db.exec("BEGIN");
+  try {
+    for (const b of boards) {
+      stmt.run(b.ats, b.ident, b.token ?? null, b.name, b.openRoles ?? null, at);
+      n++;
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  return n;
+}
+
+export function listBoards(db: Db, onlyEnabled = true): Board[] {
+  const rows = db
+    .prepare(
+      `SELECT * FROM boards ${onlyEnabled ? "WHERE enabled = 1" : ""} ORDER BY open_roles DESC`,
+    )
+    .all() as Row[];
+  return rows.map((r) => ({
+    ats: String(r.ats),
+    ident: String(r.ident),
+    token: r.token ? String(r.token) : undefined,
+    name: String(r.name),
+    openRoles: r.open_roles === null ? undefined : Number(r.open_roles),
+    verifiedAt: r.verified_at ? String(r.verified_at) : undefined,
+    misses: Number(r.misses),
+    enabled: Number(r.enabled) === 1,
+  }));
+}
+
+/** A board that stops answering is retired rather than retried forever. */
+export function recordBoardMiss(db: Db, ats: string, ident: string, limit = 14): boolean {
+  db.prepare(
+    "UPDATE boards SET misses = misses + 1, enabled = CASE WHEN misses + 1 >= ? THEN 0 ELSE enabled END WHERE ats = ? AND ident = ?",
+  ).run(limit, ats, ident);
+  const row = db.prepare("SELECT enabled FROM boards WHERE ats = ? AND ident = ?").get(ats, ident) as
+    | Row
+    | undefined;
+  return row ? Number(row.enabled) === 0 : false;
 }
 
 export function rowToJob(r: Row): Job {

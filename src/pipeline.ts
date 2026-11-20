@@ -1,6 +1,7 @@
 import type { Db } from "./store/db.ts";
 import {
   dropScores,
+  listBoards,
   finishRun,
   markEvaluated,
   recordRejects,
@@ -11,8 +12,9 @@ import {
   unscoredJobs,
   upsertJobs,
 } from "./store/db.ts";
-import { loadCompanies, loadMarket, loadProfile, loadTracks, profileHash } from "./config.ts";
+import { loadMarket, loadProfile, loadTracks, profileHash } from "./config.ts";
 import { collect } from "./ingest/index.ts";
+import { boardToCompany } from "./discovery.ts";
 import { hardFilter } from "./filter/rules.ts";
 import { scoreJobs } from "./score/rerank.ts";
 import type { ScoreRequest } from "./score/rerank.ts";
@@ -33,11 +35,14 @@ export interface CollectSummary {
 
 export async function runCollect(db: Db): Promise<CollectSummary> {
   const market = loadMarket();
-  const companies = loadCompanies();
+
+  // The tenant directory is the only source: filled by discovery, never edited
+  // by hand.
+  const companies = listBoards(db).map((board) => boardToCompany(board));
 
   if (!companies.length) {
-    warn("config/companies.yaml has no companies yet — nothing to collect.");
-    warn("Add one with: npm run discover -- <careers-page-url>");
+    warn("the tenant directory is empty — nothing to collect.");
+    warn('Run: npm run discover-web -- --bands "1-20"');
   }
 
   const { jobs, errors, perSource } = await collect(companies, market, db);

@@ -4,17 +4,13 @@ import { resolve } from "node:path";
 import type { Company } from "./config.ts";
 import { configDir } from "./util.ts";
 
-export function companiesPath(): string {
-  return resolve(configDir(), "companies.yaml");
-}
-
 interface Detection {
   company: Company;
   note?: string;
 }
 
 /**
- * Turns a careers page URL into a companies.yaml entry.
+ * Turns a careers page URL into something the directory can store.
  * Only the four ATSs with public JSON endpoints are supported by design —
  * portals like AllJobs have no API and are not scraped here.
  */
@@ -46,7 +42,7 @@ export async function detect(url: string, name?: string): Promise<Detection> {
     if (!token) {
       throw new Error(
         `found Comeet UID ${uid} but no public token on the page. ` +
-          "Open the careers page, view source, and search for 'token=' — paste it into companies.yaml.",
+          "Open the careers page, view source, and search for 'token=' — then add it with npm run boards -- add.",
       );
     }
     return {
@@ -75,63 +71,4 @@ async function findComeetToken(pageUrl: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
-}
-
-function entryLine(company: Company): string {
-  return company.source === "comeet"
-    ? `  - { name: "${company.name}", source: comeet, uid: "${company.uid}", token: "${company.token}" }`
-    : `  - { name: "${company.name}", source: ${company.source}, slug: "${company.slug}" }`;
-}
-
-/** Adds several companies at once, skipping any already present. */
-export function appendCompanies(list: Company[]): { added: number; skipped: number } {
-  const text = readFileSync(companiesPath(), "utf8");
-  const present = new Set(
-    (parse(text) as { companies?: Company[] } | null)?.companies?.map(
-      (c) => `${c.source}:${c.slug ?? c.uid}`,
-    ) ?? [],
-  );
-
-  const lines: string[] = [];
-  let skipped = 0;
-  for (const company of list) {
-    const key = `${company.source}:${company.slug ?? company.uid}`;
-    if (present.has(key)) {
-      skipped++;
-      continue;
-    }
-    present.add(key);
-    lines.push(entryLine(company));
-  }
-  if (!lines.length) return { added: 0, skipped };
-
-  const block = lines.join("\n");
-  let next: string;
-  if (/^companies:\s*\[\s*\]\s*$/m.test(text)) {
-    next = text.replace(/^companies:\s*\[\s*\]\s*$/m, `companies:\n${block}`);
-  } else if (/^companies:\s*$/m.test(text)) {
-    next = text.replace(/^companies:\s*$/m, `companies:\n${block}`);
-  } else {
-    next = text.trimEnd() + "\n" + block + "\n";
-  }
-  writeFileSync(companiesPath(), next, "utf8");
-  return { added: lines.length, skipped };
-}
-
-export function appendCompany(company: Company): void {
-  const text = readFileSync(companiesPath(), "utf8");
-  const entry =
-    company.source === "comeet"
-      ? `  - { name: "${company.name}", source: comeet, uid: "${company.uid}", token: "${company.token}" }`
-      : `  - { name: "${company.name}", source: ${company.source}, slug: "${company.slug}" }`;
-
-  let next: string;
-  if (/^companies:\s*\[\s*\]\s*$/m.test(text)) {
-    next = text.replace(/^companies:\s*\[\s*\]\s*$/m, `companies:\n${entry}`);
-  } else if (/^companies:\s*$/m.test(text)) {
-    next = text.replace(/^companies:\s*$/m, `companies:\n${entry}`);
-  } else {
-    next = text.trimEnd() + "\n" + entry + "\n";
-  }
-  writeFileSync(companiesPath(), next, "utf8");
 }

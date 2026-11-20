@@ -27,12 +27,16 @@ test("templates ship every config file the tool needs", () => {
   for (const name of [
     "profile.yaml",
     "tracks.yaml",
-    "companies.yaml",
     "market.il.yaml",
     "market.us.yaml",
   ]) {
     assert.ok(files.includes(name), `missing template: ${name}`);
   }
+});
+
+test("no company file is shipped", () => {
+  const files = readdirSync(templatesDir());
+  assert.ok(!files.includes("companies.yaml"), "the tenant directory lives in the database");
 });
 
 test("every market template declares the required fields", () => {

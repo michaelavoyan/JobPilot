@@ -20,7 +20,7 @@ import {
   topScored,
   type Db,
 } from "./store/db.ts";
-import { FIELDS, loadCompanies, loadMarket, loadProfile, loadTracks } from "./config.ts";
+import { FIELDS, loadMarket, loadProfile, loadTracks } from "./config.ts";
 import { provider } from "./score/llm.ts";
 import { configDir, env, fail, loadEnv, log, ROOT, setConfigDir, templatesDir, today } from "./util.ts";
 import { runsDir } from "./audit.ts";
@@ -208,7 +208,6 @@ export function startServer(options: ServerOptions = {}) {
           profile,
           profileError,
           market,
-          companies: loadCompanies().length,
           interests: (() => {
             try {
               return loadProfile().interests ?? [];

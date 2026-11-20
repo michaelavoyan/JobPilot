@@ -3,15 +3,18 @@ import {
   funnelCounts,
   getJob,
   isStage,
+  listBoards,
   open,
   recordDecision,
   STAGES,
+  upsertBoards,
 } from "./store/db.ts";
-import { loadCompanies, loadMarket, loadTracks } from "./config.ts";
+import { loadMarket, loadTracks } from "./config.ts";
 import { runAll, runCollect, runDigest, runScore } from "./pipeline.ts";
 import { runEval, printStats, funnelLines } from "./report.ts";
-import { appendCompanies, appendCompany, detect } from "./discover.ts";
-import { discoverCompanies, parseBands, searchConfigured, toCompany } from "./discovery.ts";
+import { detect } from "./discover.ts";
+import { availableMarkets, initConfig } from "./setup.ts";
+import { boardToCompany, discoverCompanies, parseBands, searchConfigured } from "./discovery.ts";
 import { collect, SOURCES } from "./ingest/index.ts";
 import { apiUrl, getJson } from "./ingest/types.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
@@ -122,13 +125,41 @@ async function main(): Promise<void> {
       }
       for (const error of result.errors.slice(0, 5)) warn(error);
 
-      const { added, skipped } = appendCompanies(result.boards.map(toCompany));
+      const db = open();
+      const stored = upsertBoards(
+        db,
+        result.boards.map((board) => ({
+          ats: board.ats,
+          ident: board.slug ?? board.uid!,
+          token: board.token,
+          name: board.name,
+          openRoles: board.openRoles,
+        })),
+      );
+
       log(
         `\n${result.stats.urls} URLs · ${result.stats.candidates} candidates · ` +
           `${result.stats.verified} verified · ${result.stats.inBands} in bands`,
       );
-      log(`added ${added} to companies.yaml${skipped ? `, ${skipped} already present` : ""}`);
-      log(`report: ${writeRunReport(open(), "discover-web", { ...result.stats, added })}`);
+      log(`${stored} boards remembered (${listBoards(db).length} in the directory)`);
+      log(`report: ${writeRunReport(db, "discover-web", { ...result.stats, stored })}`);
+      return;
+    }
+
+    case "boards": {
+      const db = open();
+      const boards = listBoards(db, false);
+      if (!boards.length) {
+        log("the directory is empty. Run: npm run discover-web -- --bands \"1-20\"");
+        return;
+      }
+      for (const b of boards) {
+        log(
+          `${String(b.openRoles ?? "?").padStart(4)} roles  ${b.ats.padEnd(10)} ` +
+            `${b.name}${b.enabled ? "" : "  (retired)"}`,
+        );
+      }
+      log(`\n${boards.filter((b) => b.enabled).length} active of ${boards.length}`);
       return;
     }
 
@@ -148,50 +179,36 @@ async function main(): Promise<void> {
       return;
     }
 
-    case "init": {      const dir = configDir();
-      const source = templatesDir();
-      const markets = readdirSync(source)
-        .filter((f) => f.startsWith("market.") && f.endsWith(".yaml"))
-        .map((f) => f.slice("market.".length, -".yaml".length))
-        .sort();
+    case "init": {
+      const dir = configDir();
+      const markets = availableMarkets();
 
       const marketFlag = args.indexOf("--market");
       const requested =
         marketFlag >= 0 ? args[marketFlag + 1] : (env("JOBCONFIG_MARKET") ?? markets[0]);
       if (!requested) fail("no market templates found in templates/");
-      if (!markets.includes(requested)) {
-        fail(`unknown market "${requested}". Available: ${markets.join(", ")}`);
+
+      let result;
+      try {
+        result = initConfig(dir, requested);
+      } catch (err) {
+        fail((err as Error).message);
       }
 
-      const plan: [string, string][] = [
-        ["profile.yaml", "profile.yaml"],
-        ["tracks.yaml", "tracks.yaml"],
-        ["companies.yaml", "companies.yaml"],
-        [`market.${requested}.yaml`, "market.yaml"],
-      ];
-
-      mkdirSync(dir, { recursive: true });
-      let created = 0;
-      for (const [from, to] of plan) {
-        const dest = resolve(dir, to);
-        const label = from === to ? to : `${to}  <- ${from}`;
-        if (existsSync(dest)) {
-          log(`kept     ${label}`);
-          continue;
-        }
-        copyFileSync(resolve(source, from), dest);
-        log(`created  ${label}`);
-        created++;
-      }
+      for (const file of result.created) log(`created  ${file}`);
+      for (const file of result.kept) log(`kept     ${file}`);
       log(`\nconfig dir: ${dir}`);
-      log(`market:     ${requested}   (available: ${markets.join(", ")})`);
-      if (created) log("next: npm run profile -- <cv.pdf>    (or edit profile.yaml by hand)");
+      log(`market:     ${result.market}   (available: ${markets.join(", ")})`);
+      if (result.created.length) {
+        log("next: upload a CV in the app, or edit profile.yaml by hand");
+      }
       return;
     }
 
     case "sources": {
       const market = loadMarket();
-      const companies = loadCompanies();
+      const db = open();
+      const companies = listBoards(db).map((b) => boardToCompany(b));
       const enabled = SOURCES.filter((s) => market.sources?.[s.name]?.enabled === true);
 
       if (!enabled.length) {
@@ -203,7 +220,7 @@ async function main(): Promise<void> {
       for (const source of enabled) {
         const targets = companies.filter((c) => c.source === source.name).length;
         const count = perSource[source.name] ?? 0;
-        const state = count > 0 ? "ok" : targets === 0 ? "no companies configured" : "returned 0";
+        const state = count > 0 ? "ok" : targets === 0 ? "no boards in the directory" : "returned 0";
         log(`${source.name.padEnd(12)} ${String(count).padStart(5)} jobs   ${targets} company(ies)   ${state}`);
       }
       log(`\ntotal ${jobs.length} postings${errors.length ? `, ${errors.length} error(s)` : ""}`);
@@ -289,8 +306,16 @@ async function main(): Promise<void> {
       const nameIndex = args.indexOf("--name");
       const name = nameIndex >= 0 ? args[nameIndex + 1] : undefined;
       const { company, note } = await detect(url, name);
-      appendCompany(company);
-      log(`added: ${company.name} (${company.source})`);
+      const db = open();
+      upsertBoards(db, [
+        {
+          ats: company.source,
+          ident: company.slug ?? company.uid!,
+          token: company.token,
+          name: company.name,
+        },
+      ]);
+      log(`added to the directory: ${company.name} (${company.source})`);
       if (note) warn(note);
       log("verify with: npm run sources");
       return;
