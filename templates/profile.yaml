@@ -11,6 +11,7 @@ name: Your Name
 email: ""
 phone: ""
 country: IL
+field: it          # IT / Software / Computers
 
 experience:
   total_years: 0

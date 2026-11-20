@@ -51,6 +51,7 @@ async function loadState() {
     const s = await (await fetch("/api/state")).json();
     renderPills(s);
     renderProfile(s);
+    renderField(s);
     renderMarkets(s);
     renderInterests(s.interests ?? []);
     return s;
@@ -96,6 +97,19 @@ function renderProfile(s) {
     `${p.years} years experience · ${p.managementYears} in management · ${p.stack} technologies`,
   );
   search.disabled = Boolean(s.running);
+}
+
+function renderField(s) {
+  const select = $("field");
+  const options = s.fields ?? [];
+  if (select.dataset.filled !== options.map((f) => f.id).join(",")) {
+    select.textContent = "";
+    for (const option of options) select.appendChild(new Option(option.label, option.id));
+    select.dataset.filled = options.map((f) => f.id).join(",");
+  }
+  if (s.profile?.field) select.value = s.profile.field;
+  // One choice today: it is a statement of scope, not a decision to make.
+  select.disabled = options.length <= 1;
 }
 
 function renderMarkets(s) {
@@ -177,6 +191,16 @@ for (const type of ["dragleave", "drop"]) {
 drop.addEventListener("drop", (e) => uploadCv(e.dataTransfer.files[0]));
 
 /* ---------- country ---------- */
+
+$("field").addEventListener("change", async (e) => {
+  const res = await fetch("/api/field", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ field: e.target.value }),
+  });
+  if (!res.ok) note("marketStatus", "could not save the field", "bad");
+  loadState();
+});
 
 $("market").addEventListener("change", async (e) => {
   const code = e.target.value;
