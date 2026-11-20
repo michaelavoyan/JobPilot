@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Db } from "./store/db.ts";
-import { funnelCounts, rejectSummary, scoreDistribution, stats, topScored } from "./store/db.ts";
+import type { Db } from "../storage/db.ts";
+import { funnelCounts, rejectSummary, scoreDistribution, stats, topScored } from "../storage/db.ts";
 import { loadMarket, loadProfile, loadTracks } from "./config.ts";
 import { numEnv, ROOT } from "./util.ts";
 

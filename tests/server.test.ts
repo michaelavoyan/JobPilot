@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildRunSpec } from "../src/server.ts";
+import { buildRunSpec } from "../src/server/server.ts";
 
 const q = (params: Record<string, string>) => new URLSearchParams(params);
 

@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderDigest } from "../src/deliver/digest.ts";
-import { detect } from "../src/discover.ts";
-import type { Track } from "../src/config.ts";
-import type { ScoredJob } from "../src/types.ts";
+import { renderDigest } from "../src/engine/deliver/digest.ts";
+import { detect } from "../src/engine/discover.ts";
+import type { Track } from "../src/engine/config.ts";
+import type { ScoredJob } from "../src/engine/types.ts";
 
 const tracks: Track[] = [
   { key: "a_director", label: "Director", enabled: true, weight: 0.9, order: 3, brief: "", title_include: [], title_exclude: [] },

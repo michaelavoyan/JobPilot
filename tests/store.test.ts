@@ -16,8 +16,8 @@ import {
   funnelCounts,
   topScored,
   recordDecision,
-} from "../src/store/db.ts";
-import type { Job } from "../src/types.ts";
+} from "../src/storage/db.ts";
+import type { Job } from "../src/engine/types.ts";
 
 function makeJob(over: Partial<Job> = {}): Job {
   return {

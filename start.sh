@@ -51,4 +51,4 @@ fi
 ) &
 
 echo "Starting JobPilot at $URL  (Ctrl+C to stop)"
-exec node src/server.ts --port "$PORT"
+exec node src/server/server.ts --port "$PORT"

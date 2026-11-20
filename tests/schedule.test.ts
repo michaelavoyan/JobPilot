@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LABEL, renderPlist, plistPath } from "../src/schedule.ts";
+import { LABEL, renderPlist, plistPath } from "../src/engine/schedule.ts";
 
 const opts = {
   nodePath: "/usr/local/bin/node",

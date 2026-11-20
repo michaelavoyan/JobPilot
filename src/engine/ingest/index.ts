@@ -7,7 +7,7 @@ import { lever } from "./lever.ts";
 import { ashby } from "./ashby.ts";
 import { remoteok } from "./remoteok.ts";
 import { adzuna } from "./adzuna.ts";
-import { deactivateMissing, type Db } from "../store/db.ts";
+import { deactivateMissing, type Db } from "../../storage/db.ts";
 import { warn } from "../util.ts";
 
 export const SOURCES: Source[] = [comeet, greenhouse, lever, ashby, adzuna, remoteok];

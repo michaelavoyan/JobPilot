@@ -1,4 +1,4 @@
-import type { Db } from "./store/db.ts";
+import type { Db } from "../storage/db.ts";
 import {
   dropScores,
   listBoards,
@@ -11,7 +11,7 @@ import {
   topScored,
   unscoredJobs,
   upsertJobs,
-} from "./store/db.ts";
+} from "../storage/db.ts";
 import { loadMarket, loadProfile, loadTracks, profileHash } from "./config.ts";
 import { collect } from "./ingest/index.ts";
 import { boardToCompany } from "./discovery.ts";

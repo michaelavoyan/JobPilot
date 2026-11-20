@@ -7,8 +7,8 @@ import {
   inBands,
   parseAtsUrl,
   parseBands,
-} from "../src/discovery.ts";
-import type { Market } from "../src/config.ts";
+} from "../src/engine/discovery.ts";
+import type { Market } from "../src/engine/config.ts";
 
 const market: Market = {
   country: "IL",

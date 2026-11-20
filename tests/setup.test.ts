@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { availableMarkets, initConfig } from "../src/setup.ts";
+import { availableMarkets, initConfig } from "../src/engine/setup.ts";
 
 const freshDir = () => mkdtempSync(join(tmpdir(), "jobpilot-init-"));
 

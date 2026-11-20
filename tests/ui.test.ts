@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { JSDOM } from "jsdom";
 
-const html = readFileSync(resolve(import.meta.dirname, "..", "public", "index.html"), "utf8");
-const script = readFileSync(resolve(import.meta.dirname, "..", "public", "app.js"), "utf8");
+const html = readFileSync(resolve(import.meta.dirname, "..", "src", "ui", "index.html"), "utf8");
+const script = readFileSync(resolve(import.meta.dirname, "..", "src", "ui", "app.js"), "utf8");
 
 const baseState = {
   configDir: "/repo/config",

@@ -24,7 +24,7 @@ fi
 # Only kill our own server. Something else on the port is not ours to stop.
 CMD="$(ps -o command= -p "${PID}" 2>/dev/null || true)"
 case "${CMD}" in
-  *src/server.ts*|*JobPilot*) ;;
+  *src/server/server.ts*|*JobPilot*) ;;
   *)
     echo "port ${PORT} is held by another program, not JobPilot:" >&2
     echo "  ${CMD}" >&2

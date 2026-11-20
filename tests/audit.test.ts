@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { open, saveScores, upsertJobs } from "../src/store/db.ts";
-import { writeRunReport } from "../src/audit.ts";
-import type { Job } from "../src/types.ts";
+import { open, saveScores, upsertJobs } from "../src/storage/db.ts";
+import { writeRunReport } from "../src/engine/audit.ts";
+import type { Job } from "../src/engine/types.ts";
 
 function job(): Job {
   return {

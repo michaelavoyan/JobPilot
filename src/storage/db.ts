@@ -1,9 +1,9 @@
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
-import { dbPath, nowIso } from "../util.ts";
-import { contentHash } from "../enrich/normalize.ts";
-import type { Job, Lang, ScoredJob, Score, SourceError } from "../types.ts";
+import { dbPath, nowIso } from "../engine/util.ts";
+import { contentHash } from "../engine/enrich/normalize.ts";
+import type { Job, Lang, ScoredJob, Score, SourceError } from "../engine/types.ts";
 
 type Row = Record<string, unknown>;
 

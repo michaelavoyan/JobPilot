@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clean, detectLang, jobId, repairMojibake } from "../src/enrich/normalize.ts";
-import { extractComp, toMonthly } from "../src/enrich/comp.ts";
-import { canonicalLocation, inRadius } from "../src/enrich/location.ts";
+import { clean, detectLang, jobId, repairMojibake } from "../src/engine/enrich/normalize.ts";
+import { extractComp, toMonthly } from "../src/engine/enrich/comp.ts";
+import { canonicalLocation, inRadius } from "../src/engine/enrich/location.ts";
 
 const MARKERS = {
   ILS: ["₪", 'ש"ח', "ils", "nis", "שקל", "שקלים"],

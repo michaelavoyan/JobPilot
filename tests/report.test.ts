@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { precisionAt } from "../src/report.ts";
+import { precisionAt } from "../src/engine/report.ts";
 
 const rows = (spec: [number, string][]) =>
   spec.map(([score, label], i) => ({ track: "b_senior_em", score, label, i }));

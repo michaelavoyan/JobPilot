@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { pushTelegram } from "../src/deliver/telegram.ts";
-import type { ScoredJob } from "../src/types.ts";
+import { pushTelegram } from "../src/engine/deliver/telegram.ts";
+import type { ScoredJob } from "../src/engine/types.ts";
 
 function job(over: Partial<ScoredJob> = {}): ScoredJob {
   return {
