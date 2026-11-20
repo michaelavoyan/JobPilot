@@ -111,9 +111,6 @@ export function repairMojibake(input: string): string {
   }
 }
 
-export function contentHash(text: string): string {
-  return createHash("sha1").update(text).digest("hex").slice(0, 24);
-}
 
 /** Stable fingerprint of a posting. Sorted locations so ordering never
  *  produces a duplicate row. */

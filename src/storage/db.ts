@@ -1,8 +1,8 @@
+import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dbPath, nowIso } from "../engine/util.ts";
-import { contentHash } from "../engine/enrich/normalize.ts";
 import type { Job, Lang, ScoredJob, Score, SourceError } from "../engine/types.ts";
 
 type Row = Record<string, unknown>;
@@ -109,6 +109,11 @@ function migrate(db: Db): void {
   if (!decisionColumns.some((c) => String(c.name) === "updated_at")) {
     db.exec("ALTER TABLE decisions ADD COLUMN updated_at TEXT");
   }
+}
+
+/** Change detection only: the storage layer does not depend on enrichment. */
+function contentHash(text: string): string {
+  return createHash("sha1").update(text).digest("hex").slice(0, 24);
 }
 
 export function upsertJobs(
