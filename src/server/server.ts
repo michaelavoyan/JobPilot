@@ -247,7 +247,6 @@ export function startServer(options: ServerOptions = {}) {
 
           const target = profilePath();
           const existed = existsSync(target);
-          if (existed) copyFileSync(target, `${target}.bak`);
 
           const generated = parse(
             renderProfileYaml(extracted, basename(name), today(), loadMarket().country),
@@ -304,7 +303,6 @@ export function startServer(options: ServerOptions = {}) {
           return;
         }
         const target = join(configDir(), "market.yaml");
-        if (existsSync(target)) copyFileSync(target, `${target}.bak`);
         copyFileSync(source, target);
         const m = loadMarket();
         json(res, 200, { market: { country: m.country, currency: m.currency, period: m.comp_period } });

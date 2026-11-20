@@ -19,6 +19,8 @@ currency_markers:
   EUR: ["€", "eur"]
 
 sources:
+  # Only platforms with a public API. The Israeli boards have none and are not
+  # scraped — see docs/DECISIONS.md, decision 6.
   comeet:
     enabled: true
     note: "Official Careers API. Dominant ATS for Israeli tech."
@@ -33,13 +35,7 @@ sources:
     note: "Global remote feed. Noisy; filters do the work."
   adzuna:
     enabled: false
-    note: "Adzuna does not cover Israel. Country-wide Israeli coverage is only available from the local boards, which have no public API."
-  alljobs:
-    enabled: false
-    note: "No official API. Scraping only — leave off until you decide on the ToS tradeoff."
-  drushim:
-    enabled: false
-    note: "No official API. Scraping only."
+    note: "No Israeli coverage; the API covers 16 other markets."
 
 # Postings matching these are dropped outright when
 # profile.authorization_must_pass is true.
