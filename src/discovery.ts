@@ -270,6 +270,19 @@ export async function discoverCompanies(opts: DiscoverOptions): Promise<Discover
   };
 }
 
+/** A remembered board, from the database, as a collectable company. */
+export function boardToCompany(board: {
+  ats: string;
+  ident: string;
+  token?: string;
+  name: string;
+}): Company {
+  if (board.ats === "comeet") {
+    return { name: board.name, source: "comeet", uid: board.ident, token: board.token };
+  }
+  return { name: board.name, source: board.ats, slug: board.ident };
+}
+
 export function toCompany(board: FoundBoard): Company {
   if (board.ats === "comeet") {
     return { name: board.name, source: "comeet", uid: board.uid!, token: board.token! };

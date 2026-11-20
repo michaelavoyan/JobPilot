@@ -1,6 +1,7 @@
 import type { Db } from "./store/db.ts";
 import {
   dropScores,
+  listBoards,
   finishRun,
   markEvaluated,
   recordRejects,
@@ -13,6 +14,7 @@ import {
 } from "./store/db.ts";
 import { loadCompanies, loadMarket, loadProfile, loadTracks, profileHash } from "./config.ts";
 import { collect } from "./ingest/index.ts";
+import { boardToCompany } from "./discovery.ts";
 import { hardFilter } from "./filter/rules.ts";
 import { scoreJobs } from "./score/rerank.ts";
 import type { ScoreRequest } from "./score/rerank.ts";
@@ -21,6 +23,16 @@ import { renderDigest, writeDigest } from "./deliver/digest.ts";
 import { pushTelegram } from "./deliver/telegram.ts";
 import { numEnv, log, warn } from "./util.ts";
 import type { SourceError } from "./types.ts";
+
+function dedupeCompanies(list: ReturnType<typeof loadCompanies>) {
+  const seen = new Set<string>();
+  return list.filter((c) => {
+    const key = `${c.source}:${c.slug ?? c.uid}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export interface CollectSummary {
   fetched: number;
@@ -33,11 +45,16 @@ export interface CollectSummary {
 
 export async function runCollect(db: Db): Promise<CollectSummary> {
   const market = loadMarket();
-  const companies = loadCompanies();
+
+  // Manual seeds plus every board discovery has ever verified. The list is
+  // data, so the user never has to maintain it by hand.
+  const seeds = loadCompanies();
+  const discovered = listBoards(db).map((board) => boardToCompany(board));
+  const companies = dedupeCompanies([...seeds, ...discovered]);
 
   if (!companies.length) {
-    warn("config/companies.yaml has no companies yet — nothing to collect.");
-    warn("Add one with: npm run discover -- <careers-page-url>");
+    warn("no companies or discovered boards yet — nothing to collect.");
+    warn("Run: npm run discover-web -- --bands \"1-20\"");
   }
 
   const { jobs, errors, perSource } = await collect(companies, market, db);

@@ -21,7 +21,9 @@
     "feedback": "node src/cli.ts feedback",
     "eval": "node src/cli.ts eval",
     "stats": "node src/cli.ts stats",
+    "boards": "node src/cli.ts boards",
     "discover-web": "node src/cli.ts discover-web",
+    "boards": "node src/cli.ts boards",
     "funnel": "node src/cli.ts funnel",
     "schedule": "node src/cli.ts schedule",
     "test": "node --test tests/"

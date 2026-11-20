@@ -10,6 +10,9 @@ import {
   saveScores,
   dropScores,
   clearDecision,
+  listBoards,
+  recordBoardMiss,
+  upsertBoards,
   funnelCounts,
   topScored,
   recordDecision,
@@ -138,6 +141,41 @@ test("funnelCounts returns stages in pipeline order", () => {
     counts.map((c) => c.stage),
     ["applied", "interview", "skipped"],
   );
+});
+
+test("discovered boards are remembered and deduplicated", () => {
+  const db = open(":memory:");
+  upsertBoards(db, [
+    { ats: "greenhouse", ident: "acme", name: "Acme", openRoles: 12 },
+    { ats: "lever", ident: "other", name: "Other", openRoles: 3 },
+  ]);
+  assert.equal(listBoards(db).length, 2);
+
+  upsertBoards(db, [{ ats: "greenhouse", ident: "acme", name: "Acme", openRoles: 20 }]);
+  const boards = listBoards(db);
+  assert.equal(boards.length, 2, "a known board is updated, not duplicated");
+  assert.equal(boards.find((b) => b.ident === "acme")!.openRoles, 20);
+});
+
+test("a board that keeps failing is retired", () => {
+  const db = open(":memory:");
+  upsertBoards(db, [{ ats: "lever", ident: "gone", name: "Gone" }]);
+  for (let i = 0; i < 13; i++) recordBoardMiss(db, "lever", "gone");
+  assert.equal(listBoards(db).length, 1, "still active before the limit");
+
+  recordBoardMiss(db, "lever", "gone");
+  assert.equal(listBoards(db).length, 0, "retired after the limit");
+  assert.equal(listBoards(db, false).length, 1, "but still on record");
+});
+
+test("re-discovering a retired board revives it", () => {
+  const db = open(":memory:");
+  upsertBoards(db, [{ ats: "lever", ident: "back", name: "Back" }]);
+  for (let i = 0; i < 14; i++) recordBoardMiss(db, "lever", "back");
+  assert.equal(listBoards(db).length, 0);
+
+  upsertBoards(db, [{ ats: "lever", ident: "back", name: "Back", openRoles: 5 }]);
+  assert.equal(listBoards(db).length, 1);
 });
 
 test("dropScores removes a stale verdict for one track only", () => {  const db = open(":memory:");

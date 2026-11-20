@@ -3,15 +3,17 @@ import {
   funnelCounts,
   getJob,
   isStage,
+  listBoards,
   open,
   recordDecision,
   STAGES,
+  upsertBoards,
 } from "./store/db.ts";
 import { loadCompanies, loadMarket, loadTracks } from "./config.ts";
 import { runAll, runCollect, runDigest, runScore } from "./pipeline.ts";
 import { runEval, printStats, funnelLines } from "./report.ts";
-import { appendCompanies, appendCompany, detect } from "./discover.ts";
-import { discoverCompanies, parseBands, searchConfigured, toCompany } from "./discovery.ts";
+import { appendCompany, detect } from "./discover.ts";
+import { discoverCompanies, parseBands, searchConfigured } from "./discovery.ts";
 import { collect, SOURCES } from "./ingest/index.ts";
 import { apiUrl, getJson } from "./ingest/types.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
@@ -122,13 +124,41 @@ async function main(): Promise<void> {
       }
       for (const error of result.errors.slice(0, 5)) warn(error);
 
-      const { added, skipped } = appendCompanies(result.boards.map(toCompany));
+      const db = open();
+      const stored = upsertBoards(
+        db,
+        result.boards.map((board) => ({
+          ats: board.ats,
+          ident: board.slug ?? board.uid!,
+          token: board.token,
+          name: board.name,
+          openRoles: board.openRoles,
+        })),
+      );
+
       log(
         `\n${result.stats.urls} URLs · ${result.stats.candidates} candidates · ` +
           `${result.stats.verified} verified · ${result.stats.inBands} in bands`,
       );
-      log(`added ${added} to companies.yaml${skipped ? `, ${skipped} already present` : ""}`);
-      log(`report: ${writeRunReport(open(), "discover-web", { ...result.stats, added })}`);
+      log(`${stored} boards remembered (${listBoards(db).length} in the directory)`);
+      log(`report: ${writeRunReport(db, "discover-web", { ...result.stats, stored })}`);
+      return;
+    }
+
+    case "boards": {
+      const db = open();
+      const boards = listBoards(db, false);
+      if (!boards.length) {
+        log("the directory is empty. Run: npm run discover-web -- --bands \"1-20\"");
+        return;
+      }
+      for (const b of boards) {
+        log(
+          `${String(b.openRoles ?? "?").padStart(4)} roles  ${b.ats.padEnd(10)} ` +
+            `${b.name}${b.enabled ? "" : "  (retired)"}`,
+        );
+      }
+      log(`\n${boards.filter((b) => b.enabled).length} active of ${boards.length}`);
       return;
     }
 

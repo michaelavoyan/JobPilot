@@ -181,7 +181,11 @@ export function loadMarket(): Market {
   return m;
 }
 
+/** Optional: the tenant directory in the database is the primary source, and
+ *  this file only holds manual pins. */
 export function loadCompanies(): Company[] {
+  const path = resolve(configDir(), "companies.yaml");
+  if (!existsSync(path)) return [];
   const raw = readYaml<{ companies: Company[] | null }>("companies.yaml");
   const list = raw.companies ?? [];
   const valid: Company[] = [];
