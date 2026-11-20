@@ -25,7 +25,7 @@
     "discover-web": "node src/cli.ts discover-web",
     "funnel": "node src/cli.ts funnel",
     "schedule": "node src/cli.ts schedule",
-    "test": "npm run typecheck && node --test tests/",
+    "test": "npm run typecheck && node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
