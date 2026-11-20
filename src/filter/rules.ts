@@ -2,6 +2,7 @@ import type { Job, Verdict } from "../types.ts";
 import type { Market, Profile, Track } from "../config.ts";
 import { toMonthly } from "../enrich/comp.ts";
 import { inRadius } from "../enrich/location.ts";
+import { fieldById } from "../fields.ts";
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -39,7 +40,16 @@ export function hardFilter(
   const included = matchesAny(title, [...track.title_include, ...(profile.interests ?? [])]);
   if (!included) return { ok: false, reason: "title_not_in_track", flags };
 
-  // 3. Market-wide seniority traps (intern / junior / student)
+  // 3. Field exclusions. A track keyword can match a role that belongs to a
+  //    different field entirely — "sales" inside "Sales Engineer" is the classic
+  //    case — so the field is consulted before anything expensive runs.
+  const field = fieldById(profile.field);
+  if (field) {
+    const outsideField = matchesAny(title, field.excludeTitles);
+    if (outsideField) return { ok: false, reason: `field_exclude:${outsideField}`, flags };
+  }
+
+  // 4. Market-wide seniority traps (intern / junior / student)
   for (const pattern of market.exclude_title_patterns) {
     try {
       if (new RegExp(pattern, "i").test(job.title)) {
@@ -50,7 +60,7 @@ export function hardFilter(
     }
   }
 
-  // 4. Security clearance / citizenship requirements
+  // 5. Security clearance / citizenship requirements
   if (profile.authorization_must_pass) {
     for (const pattern of market.clearance_patterns) {
       const re = new RegExp(pattern, "i");
@@ -60,7 +70,7 @@ export function hardFilter(
     }
   }
 
-  // 5. Location. `remote_ok` permits remote roles; it must never let an
+  // 6. Location. `remote_ok` permits remote roles; it must never let an
   //    out-of-radius on-site role through — that is how a radius filter
   //    quietly stops filtering.
   if (job.remote) {
@@ -109,7 +119,7 @@ export function hardFilter(
     }
   }
 
-  // 6. Salary floor. Only enforced when both sides are known: a guessed
+  // 7. Salary floor. Only enforced when both sides are known: a guessed
   //    floor silently deletes jobs, which is the worst failure mode here.
   const floor = toMonthly(profile.comp_floor);
   const actual = toMonthly(job.comp);
