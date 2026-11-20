@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parse } from "yaml";
 import { configDir, setConfigDir, templatesDir } from "../src/engine/util.ts";
@@ -84,7 +84,10 @@ test("city aliases are unambiguous enough to be safe as substrings", () => {
   }
 });
 
-test("the active market config is valid", () => {
+// A fresh clone has no config/: init creates it. The suite must still pass.
+const hasConfig = existsSync(join(configDir(), "market.yaml"));
+
+test("the active market config is valid", { skip: hasConfig ? false : "no config directory yet" }, () => {
   const market = loadMarket();
   assert.ok(market.country);
   assert.ok(market.currency);

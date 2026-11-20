@@ -21,35 +21,30 @@
 <main>
   <section class="wizard">
     <div class="step">
-      <span class="n">1</span>
-      <div class="step-body">
-        <h2>Your CV</h2>
-        <label id="drop" class="drop" for="cv">
+      <h2>Your CV</h2>
+      <label id="drop" class="drop" for="cv">
           <input id="cv" type="file" accept=".pdf,.docx,.md,.markdown" />
           <strong id="dropTitle">Drop your CV here, or click to choose</strong>
-          <span class="muted">PDF, DOCX or Markdown</span>
-        </label>
-        <p id="cvStatus" class="note"></p>
-      </div>
+        <span class="muted">PDF, DOCX or Markdown</span>
+      </label>
+      <p id="cvStatus" class="note"></p>
     </div>
 
     <div class="step">
-      <span class="n">2</span>
-      <div class="step-body">
-        <h2>What and where</h2>
-        <select id="field" aria-label="Field"></select>
-        <select id="market" aria-label="Country"></select>
-        <p id="marketStatus" class="note"></p>
-      </div>
+      <h2>What</h2>
+      <select id="field" aria-label="Field"></select>
     </div>
 
     <div class="step">
-      <span class="n">3</span>
-      <div class="step-body">
-        <h2>Also open to <span class="opt">optional</span></h2>
-        <div id="tokenField" class="tokenfield">
-          <input id="interestInput" type="text" placeholder="e.g. platform engineering, developer tooling" />
-        </div>
+      <h2>Where</h2>
+      <select id="market" aria-label="Country"></select>
+      <p id="marketStatus" class="note"></p>
+    </div>
+
+    <div class="step">
+      <h2>Also open to <span class="opt">optional</span></h2>
+      <div id="tokenField" class="tokenfield">
+        <input id="interestInput" type="text" placeholder="e.g. platform engineering, developer tooling" />
       </div>
     </div>
 

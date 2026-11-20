@@ -119,6 +119,27 @@ test("with no profile the search button is disabled and explains why", async () 
   dom.window.close();
 });
 
+test("the form has no step numbers and separates what from where", async () => {
+  const dom = boot();
+  await settle();
+  const doc = dom.window.document;
+  assert.equal(doc.querySelectorAll(".step .n").length, 0, "numbering is gone");
+
+  const headings = [...doc.querySelectorAll(".wizard h2")].map((h) => h.textContent?.trim());
+  assert.deepEqual(headings.slice(0, 3), ["Your CV", "What", "Where"]);
+  dom.window.close();
+});
+
+test("the field and country selectors sit in different sections", async () => {
+  const dom = boot();
+  await settle();
+  const doc = dom.window.document;
+  const fieldSection = doc.getElementById("field")!.closest(".step")!;
+  const marketSection = doc.getElementById("market")!.closest(".step")!;
+  assert.notEqual(fieldSection, marketSection);
+  dom.window.close();
+});
+
 test("the field selector shows the single supported field and is locked", async () => {
   const dom = boot();
   await settle();
