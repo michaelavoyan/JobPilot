@@ -20,7 +20,7 @@ import {
   topScored,
   type Db,
 } from "./store/db.ts";
-import { loadCompanies, loadMarket, loadProfile, loadTracks } from "./config.ts";
+import { FIELDS, loadCompanies, loadMarket, loadProfile, loadTracks } from "./config.ts";
 import { provider } from "./score/llm.ts";
 import { configDir, env, fail, loadEnv, log, ROOT, setConfigDir, templatesDir, today } from "./util.ts";
 import { runsDir } from "./audit.ts";
@@ -180,6 +180,7 @@ export function startServer(options: ServerOptions = {}) {
           const tracks = loadTracks().filter((t) => t.enabled);
           profile = {
             cvFile: p.cv_file ?? null,
+            field: p.field ?? "it",
             headline: p.headline ?? "",
             years: p.experience.total_years,
             managementYears: p.experience.management_years,
@@ -217,6 +218,7 @@ export function startServer(options: ServerOptions = {}) {
           })(),
           stats: stats(db),
           rejects: rejectSummary(db, 5),
+          fields: FIELDS,
           markets: readdirSync(templatesDir())
             .filter((f) => /^market\..+\.yaml$/.test(f))
             .map((f) => f.slice(7, -5)),
@@ -307,6 +309,25 @@ export function startServer(options: ServerOptions = {}) {
         copyFileSync(source, target);
         const m = loadMarket();
         json(res, 200, { market: { country: m.country, currency: m.currency, period: m.comp_period } });
+        return;
+      }
+
+      if (pathname === "/api/field" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const field = String(body.field ?? "");
+        if (!FIELDS.some((f) => f.id === field)) {
+          json(res, 400, { error: `unsupported field "${field}"` });
+          return;
+        }
+        const target = profilePath();
+        if (!existsSync(target)) {
+          json(res, 400, { error: "add your CV first" });
+          return;
+        }
+        const current = parse(readFileSync(target, "utf8")) as Record<string, unknown>;
+        current.field = field;
+        writeFileSync(target, stringify(current, { lineWidth: 0 }), "utf8");
+        json(res, 200, { field });
         return;
       }
 

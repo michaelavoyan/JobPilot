@@ -16,6 +16,7 @@ const baseState = {
     years: 19,
     managementYears: 9,
     cvFile: "jane-doe-cv.pdf",
+    field: "it",
     stack: 12,
     domains: 4,
     compFloor: null,
@@ -28,6 +29,7 @@ const baseState = {
   stats: { jobs: 1619, active: 1619, scored: 65, decisions: 2, rejects: 4810 },
   rejects: [],
   markets: ["il", "us"],
+  fields: [{ id: "it", label: "Hi-Tech & Software" }],
   interests: ["platform engineering"],
   running: false,
 };
@@ -114,6 +116,17 @@ test("with no profile the search button is disabled and explains why", async () 
   const button = dom.window.document.getElementById("search") as HTMLButtonElement;
   assert.equal(button.disabled, true);
   assert.match(dom.window.document.getElementById("subtitle")!.textContent ?? "", /add your cv/i);
+  dom.window.close();
+});
+
+test("the field selector shows the single supported field and is locked", async () => {
+  const dom = boot();
+  await settle();
+  const select = dom.window.document.getElementById("field") as HTMLSelectElement;
+  assert.equal(select.options.length, 1);
+  assert.equal(select.options[0].textContent, "Hi-Tech & Software");
+  assert.equal(select.value, "it");
+  assert.equal(select.disabled, true, "one option is a statement, not a choice");
   dom.window.close();
 });
 

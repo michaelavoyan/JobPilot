@@ -5,6 +5,11 @@ import { parse } from "yaml";
 import type { Comp } from "./types.ts";
 import { configDir, warn } from "./util.ts";
 
+/** Everything JobPilot knows how to search for. Deliberately one entry. */
+export const FIELDS: { id: string; label: string }[] = [
+  { id: "it", label: "Hi-Tech & Software" },
+];
+
 export interface Track {
   key: string;
   label: string;
@@ -32,6 +37,8 @@ export interface Profile {
   country: string;
   /** Filename of the CV this profile came from, shown in the UI. */
   cv_file?: string;
+  /** The kind of work being searched for. Only one field is supported today. */
+  field?: string;
   experience: {
     total_years: number;
     management_years: number;
@@ -128,6 +135,7 @@ export function loadProfile(): Profile {
   p.authorization_must_pass = p.authorization_must_pass ?? true;
   p.domains = p.domains ?? [];
   p.interests = p.interests ?? [];
+  p.field = p.field ?? "it";
   p.stack = p.stack ?? [];
   p.ai_practice = p.ai_practice ?? [];
   p.people_management = p.people_management ?? [];

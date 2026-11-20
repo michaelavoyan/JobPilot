@@ -11,6 +11,7 @@ name: Your Name
 email: ""
 phone: ""
 country: IL
+field: it          # Hi-Tech & Software
 
 experience:
   total_years: 0

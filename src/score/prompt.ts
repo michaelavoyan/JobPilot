@@ -48,6 +48,9 @@ Include an entry for every job index and every track key requested for it.
 
 export function buildProfileBlock(p: Profile): string {
   const lines: string[] = [];
+  const field = p.field ?? "it";
+  const label = field === "it" ? "Hi-Tech & Software" : field;
+  lines.push(`Target field: ${label}`);
   lines.push(`Name: ${p.name}`);
   if (p.headline) lines.push(`Headline: ${p.headline}`);
   lines.push(
