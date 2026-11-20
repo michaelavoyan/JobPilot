@@ -512,16 +512,6 @@ export function startServer(options: ServerOptions = {}) {
         return;
       }
 
-      if (pathname === "/api/cancel" && req.method === "POST") {
-        if (!running) {
-          json(res, 200, { ok: false, reason: "nothing running" });
-          return;
-        }
-        running.kill("SIGTERM");
-        json(res, 200, { ok: true });
-        return;
-      }
-
       json(res, 404, { error: "not found" });
     } catch (err) {
       if (!res.headersSent) json(res, 500, { error: (err as Error).message });
