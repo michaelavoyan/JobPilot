@@ -34,24 +34,6 @@ That is the whole setup.
 
 ---
 
-## Reading a match
-
-```
-84  Via — Mobile Team Lead
-    Tel Aviv
-
-    Mobile team lead across iOS and Android — a direct match
-    Guides engineers on roadmap, delivery and product areas
-```
-
-**84** means strong fit. Above 80 is worth applying this week.
-
-The lines underneath say why, in plain language.
-
-**Apply** opens the job on the company's own website.
-
----
-
 ## After you decide
 
 | | |
