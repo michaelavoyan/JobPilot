@@ -1,4 +1,5 @@
 import type { Job, Score } from "../types.ts";
+import { loadMarket } from "../config.ts";
 import type { Profile, Track } from "../config.ts";
 import { chat, estimateCost } from "./llm.ts";
 import { buildSystem, buildUser } from "./prompt.ts";
@@ -113,11 +114,18 @@ async function runPool<T, R>(
   return out;
 }
 
+export interface ScoreOptions {
+  batchSize: number;
+  concurrency: number;
+  /** Injected by tests so the wiring can be exercised without a provider. */
+  chatFn?: typeof chat;
+}
+
 export async function scoreJobs(
   requests: ScoreRequest[],
   tracks: Track[],
   profile: Profile,
-  options: { batchSize: number; concurrency: number },
+  options: ScoreOptions,
 ): Promise<ScoreOutcome> {
   const outcome: ScoreOutcome = {
     scores: [],
@@ -130,6 +138,7 @@ export async function scoreJobs(
   };
   if (!requests.length) return outcome;
 
+  const callChat = options.chatFn ?? chat;
   const briefs = tracks.filter((t) => requests.some((r) => r.tracks.includes(t.key)));
   const system = buildSystem(loadMarket().country);
   let anyReportedCost = false;
@@ -149,7 +158,7 @@ export async function scoreJobs(
 
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const res = await chat(system, attempt === 0 ? user : user + feedback);
+        const res = await callChat(system, attempt === 0 ? user : user + feedback);
         outcome.tokensIn += res.tokensIn;
         outcome.tokensOut += res.tokensOut;
         outcome.model = res.model;

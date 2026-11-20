@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "JobPilot — personal job-search agent: ingest postings, filter, score against a profile, emit a digest.",
+  "description": "JobPilot \u2014 personal job-search agent: ingest postings, filter, score against a profile, emit a digest.",
   "engines": {
     "node": ">=24"
   },
@@ -23,10 +23,10 @@
     "stats": "node src/cli.ts stats",
     "boards": "node src/cli.ts boards",
     "discover-web": "node src/cli.ts discover-web",
-    "boards": "node src/cli.ts boards",
     "funnel": "node src/cli.ts funnel",
     "schedule": "node src/cli.ts schedule",
-    "test": "node --test tests/"
+    "test": "npm run typecheck && node --test tests/",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "fflate": "^0.8.3",
@@ -34,6 +34,8 @@
     "yaml": "^2.6.1"
   },
   "devDependencies": {
-    "jsdom": "^31.0.1"
+    "@types/node": "^26.6.6",
+    "jsdom": "^31.0.1",
+    "typescript": "^7.0.2"
   }
 }
