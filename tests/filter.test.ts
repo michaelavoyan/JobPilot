@@ -86,6 +86,24 @@ test("business development is not mistaken for a development manager", () => {
   assert.equal(v.reason, "title_exclude:business development");
 });
 
+test("the field excludes roles outside it, even when a track keyword matches", () => {
+  // Matches the track keyword "engineering manager", so only the field can stop it.
+  const v = hardFilter(job({ title: "Sales Engineering Manager" }), emTrack, profile, market);
+  assert.equal(v.ok, false);
+  assert.match(v.reason ?? "", /^field_exclude:/);
+});
+
+test("a software title is unaffected by the field rule", () => {
+  const v = hardFilter(job({ title: "Mobile Engineering Manager" }), emTrack, profile, market);
+  assert.equal(v.ok, true);
+});
+
+test("switching to an unknown field leaves the search unrestricted", () => {
+  const unknown = { ...profile, field: "finance" };
+  const v = hardFilter(job({ title: "Sales Engineering Manager" }), emTrack, unknown, market);
+  assert.notEqual(v.reason, "field_exclude:sales");
+});
+
 test("rejects a track-level exclusion", () => {
   const v = hardFilter(job({ title: "VP Engineering" }), emTrack, profile, market);
   assert.equal(v.ok, false);

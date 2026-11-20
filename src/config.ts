@@ -5,10 +5,8 @@ import { parse } from "yaml";
 import type { Comp } from "./types.ts";
 import { configDir, warn } from "./util.ts";
 
-/** Everything JobPilot knows how to search for. Deliberately one entry. */
-export const FIELDS: { id: string; label: string }[] = [
-  { id: "it", label: "Hi-Tech & Software" },
-];
+export { FIELDS, DEFAULT_FIELD, fieldById } from "./fields.ts";
+export type { Field } from "./fields.ts";
 
 export interface Track {
   key: string;

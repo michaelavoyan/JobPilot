@@ -2,6 +2,7 @@ import type { Profile, Track } from "../config.ts";
 import type { Job } from "../types.ts";
 import { formatComp } from "../enrich/comp.ts";
 import { excerpt } from "../enrich/normalize.ts";
+import { fieldById } from "../fields.ts";
 
 export const RUBRIC = `
 Score each posting 0-100 against the candidate profile, per track.
@@ -48,9 +49,8 @@ Include an entry for every job index and every track key requested for it.
 
 export function buildProfileBlock(p: Profile): string {
   const lines: string[] = [];
-  const field = p.field ?? "it";
-  const label = field === "it" ? "Hi-Tech & Software" : field;
-  lines.push(`Target field: ${label}`);
+  const field = fieldById(p.field);
+  if (field) lines.push(`Target field: ${field.label} — ${field.context}`);
   lines.push(`Name: ${p.name}`);
   if (p.headline) lines.push(`Headline: ${p.headline}`);
   lines.push(
