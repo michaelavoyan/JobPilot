@@ -13,6 +13,7 @@ import { loadMarket, loadTracks } from "./config.ts";
 import { runAll, runCollect, runDigest, runScore } from "./pipeline.ts";
 import { runEval, printStats, funnelLines } from "./report.ts";
 import { detect } from "./discover.ts";
+import { availableMarkets, initConfig } from "./setup.ts";
 import { boardToCompany, discoverCompanies, parseBands, searchConfigured } from "./discovery.ts";
 import { collect, SOURCES } from "./ingest/index.ts";
 import { apiUrl, getJson } from "./ingest/types.ts";
@@ -178,43 +179,29 @@ async function main(): Promise<void> {
       return;
     }
 
-    case "init": {      const dir = configDir();
-      const source = templatesDir();
-      const markets = readdirSync(source)
-        .filter((f) => f.startsWith("market.") && f.endsWith(".yaml"))
-        .map((f) => f.slice("market.".length, -".yaml".length))
-        .sort();
+    case "init": {
+      const dir = configDir();
+      const markets = availableMarkets();
 
       const marketFlag = args.indexOf("--market");
       const requested =
         marketFlag >= 0 ? args[marketFlag + 1] : (env("JOBCONFIG_MARKET") ?? markets[0]);
       if (!requested) fail("no market templates found in templates/");
-      if (!markets.includes(requested)) {
-        fail(`unknown market "${requested}". Available: ${markets.join(", ")}`);
+
+      let result;
+      try {
+        result = initConfig(dir, requested);
+      } catch (err) {
+        fail((err as Error).message);
       }
 
-      const plan: [string, string][] = [
-        ["profile.yaml", "profile.yaml"],
-        ["tracks.yaml", "tracks.yaml"],
-        [`market.${requested}.yaml`, "market.yaml"],
-      ];
-
-      mkdirSync(dir, { recursive: true });
-      let created = 0;
-      for (const [from, to] of plan) {
-        const dest = resolve(dir, to);
-        const label = from === to ? to : `${to}  <- ${from}`;
-        if (existsSync(dest)) {
-          log(`kept     ${label}`);
-          continue;
-        }
-        copyFileSync(resolve(source, from), dest);
-        log(`created  ${label}`);
-        created++;
-      }
+      for (const file of result.created) log(`created  ${file}`);
+      for (const file of result.kept) log(`kept     ${file}`);
       log(`\nconfig dir: ${dir}`);
-      log(`market:     ${requested}   (available: ${markets.join(", ")})`);
-      if (created) log("next: npm run profile -- <cv.pdf>    (or edit profile.yaml by hand)");
+      log(`market:     ${result.market}   (available: ${markets.join(", ")})`);
+      if (result.created.length) {
+        log("next: upload a CV in the app, or edit profile.yaml by hand");
+      }
       return;
     }
 

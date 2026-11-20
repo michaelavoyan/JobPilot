@@ -157,6 +157,15 @@ test("discovered boards are remembered and deduplicated", () => {
   assert.equal(boards.find((b) => b.ident === "acme")!.openRoles, 20);
 });
 
+test("re-upserting a Comeet board keeps its token when none is supplied", () => {
+  const db = open(":memory:");
+  upsertBoards(db, [{ ats: "comeet", ident: "72.006", token: "abc", name: "Acme" }]);
+  upsertBoards(db, [{ ats: "comeet", ident: "72.006", name: "Acme", openRoles: 12 }]);
+  const [board] = listBoards(db);
+  assert.equal(board.token, "abc", "the token must not be lost");
+  assert.equal(board.openRoles, 12);
+});
+
 test("a board that keeps failing is retired", () => {
   const db = open(":memory:");
   upsertBoards(db, [{ ats: "lever", ident: "gone", name: "Gone" }]);

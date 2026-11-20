@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  boardToCompany,
   buildQueries,
   displayName,
   inBands,
@@ -75,6 +76,30 @@ test("slug becomes a readable company name", () => {
   assert.equal(displayName("moon-active"), "Moon Active");
   assert.equal(displayName("snyk"), "Snyk");
   assert.equal(displayName("aidoc_medical"), "Aidoc Medical");
+});
+
+test("a remembered board becomes a collectable company", () => {
+  assert.deepEqual(
+    boardToCompany({ ats: "greenhouse", ident: "acme", name: "Acme" }),
+    { name: "Acme", source: "greenhouse", slug: "acme" },
+  );
+  assert.deepEqual(boardToCompany({ ats: "lever", ident: "acme", name: "Acme" }), {
+    name: "Acme",
+    source: "lever",
+    slug: "acme",
+  });
+  assert.deepEqual(boardToCompany({ ats: "ashby", ident: "acme", name: "Acme" }), {
+    name: "Acme",
+    source: "ashby",
+    slug: "acme",
+  });
+});
+
+test("a Comeet board keeps its token, which the API requires", () => {
+  assert.deepEqual(
+    boardToCompany({ ats: "comeet", ident: "72.006", token: "abc123", name: "Acme" }),
+    { name: "Acme", source: "comeet", uid: "72.006", token: "abc123" },
+  );
 });
 
 test("queries cover every ATS for every city", () => {

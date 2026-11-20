@@ -34,6 +34,11 @@ test("templates ship every config file the tool needs", () => {
   }
 });
 
+test("no company file is shipped", () => {
+  const files = readdirSync(templatesDir());
+  assert.ok(!files.includes("companies.yaml"), "the tenant directory lives in the database");
+});
+
 test("every market template declares the required fields", () => {
   const markets = readdirSync(templatesDir()).filter((f) => /^market\..+\.yaml$/.test(f));
   assert.ok(markets.length >= 2);
