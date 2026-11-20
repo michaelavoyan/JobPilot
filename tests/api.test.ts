@@ -1,7 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
-import { startServer } from "../src/server.ts";
+import { startServer } from "../src/server/server.ts";
 
 // Read-only routes only: these tests must never write to the user's database.
 const server = startServer({ port: 0 });

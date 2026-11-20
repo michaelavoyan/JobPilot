@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configDir, setConfigDir } from "../src/util.ts";
-import { open, upsertBoards, listBoards } from "../src/store/db.ts";
-import { runCollect } from "../src/pipeline.ts";
+import { configDir, setConfigDir } from "../src/engine/util.ts";
+import { open, upsertBoards, listBoards } from "../src/storage/db.ts";
+import { runCollect } from "../src/engine/pipeline.ts";
 
 /** A config directory whose sources are all disabled, so nothing hits the network. */
 function quietConfigDir(): string {

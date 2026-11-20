@@ -20,13 +20,11 @@ export function renderProfileYaml(
   profile: ExtractedProfile,
   source: string,
   date: string,
-  defaultCountry = "",
 ): string {
   const body = {
     name: profile.name,
     email: profile.email ?? "",
     phone: profile.phone ?? "",
-    country: profile.country ?? defaultCountry,
     cv_file: source,
     experience: {
       total_years: profile.experience.total_years,

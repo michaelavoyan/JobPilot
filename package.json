@@ -10,7 +10,7 @@
   "scripts": {
     "sources": "node src/cli.ts sources",
     "init": "node src/cli.ts init",
-    "ui": "node src/server.ts",
+    "ui": "node src/server/server.ts",
     "profile": "node src/cli.ts profile",
     "collect": "node src/cli.ts collect",
     "score": "node src/cli.ts score",

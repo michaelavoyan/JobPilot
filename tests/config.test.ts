@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parse } from "yaml";
-import { configDir, setConfigDir, templatesDir } from "../src/util.ts";
-import { loadMarket } from "../src/config.ts";
+import { configDir, setConfigDir, templatesDir } from "../src/engine/util.ts";
+import { loadMarket } from "../src/engine/config.ts";
 
 function template(name: string): Record<string, unknown> {
   return parse(readFileSync(join(templatesDir(), name), "utf8")) as Record<string, unknown>;

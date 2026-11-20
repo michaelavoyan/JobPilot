@@ -4,10 +4,10 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
-import { docxText, normalizeProfile, readCv } from "../src/profile/extract.ts";
+import { docxText, normalizeProfile, readCv } from "../src/engine/profile/extract.ts";
 import { strToU8, zipSync } from "fflate";
-import { profilePath, renderProfileYaml, writeProfile } from "../src/profile/write.ts";
-import { configDir, setConfigDir } from "../src/util.ts";
+import { profilePath, renderProfileYaml, writeProfile } from "../src/engine/profile/write.ts";
+import { configDir, setConfigDir } from "../src/engine/util.ts";
 
 const raw = {
   name: "  Jane   Doe ",

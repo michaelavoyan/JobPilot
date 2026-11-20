@@ -1,5 +1,5 @@
-import type { Db } from "./store/db.ts";
-import { decisions, funnelCounts, rejectSummary, scoreDistribution, stats } from "./store/db.ts";
+import type { Db } from "../storage/db.ts";
+import { decisions, funnelCounts, rejectSummary, scoreDistribution, stats } from "../storage/db.ts";
 import type { Track } from "./config.ts";
 import { log } from "./util.ts";
 

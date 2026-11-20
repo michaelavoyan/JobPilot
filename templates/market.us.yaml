@@ -19,6 +19,7 @@ currency_markers:
   CAD: ["C$", "cad"]
 
 sources:
+  # Only platforms with a public API. See docs/DECISIONS.md, decision 6.
   greenhouse:
     enabled: true
   lever:
@@ -30,13 +31,10 @@ sources:
     note: "Global remote feed. Noisy; filters do the work."
   adzuna:
     enabled: true
-    note: "Country-wide feed. Needs ADZUNA_APP_ID and ADZUNA_APP_KEY; covers us, uk, de, fr and 12 more."
+    note: "Country-wide feed. Needs ADZUNA_APP_ID and ADZUNA_APP_KEY."
   comeet:
     enabled: false
-    note: "Israeli-centric ATS. Enable only if your US targets use it."
-  indeed:
-    enabled: false
-    note: "Publisher API is partner-only; approval is unlikely for a personal tool."
+    note: "Israeli-centric; enable only if your US targets use it."
 
 # Dropped when profile.authorization_must_pass is true. US postings state these
 # far more often than Israeli ones, and almost always in boilerplate.

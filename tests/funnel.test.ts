@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { funnelLines } from "../src/report.ts";
-import { isStage, STAGES } from "../src/store/db.ts";
+import { funnelLines } from "../src/engine/report.ts";
+import { isStage, STAGES } from "../src/storage/db.ts";
 
 const counts = (spec: Record<string, number>) =>
   Object.entries(spec).map(([stage, n]) => ({ stage, n }));

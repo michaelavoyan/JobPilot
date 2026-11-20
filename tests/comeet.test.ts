@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mapPositions } from "../src/ingest/comeet.ts";
-import type { Market } from "../src/config.ts";
+import { mapPositions } from "../src/engine/ingest/comeet.ts";
+import type { Market } from "../src/engine/config.ts";
 
 const market: Market = {
   country: "IL",

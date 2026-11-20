@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractJson, parseBatch } from "../src/score/rerank.ts";
-import type { ScoreRequest } from "../src/score/rerank.ts";
-import type { Job } from "../src/types.ts";
+import { extractJson, parseBatch } from "../src/engine/score/rerank.ts";
+import type { ScoreRequest } from "../src/engine/score/rerank.ts";
+import type { Job } from "../src/engine/types.ts";
 
 function job(id: string): Job {
   return {

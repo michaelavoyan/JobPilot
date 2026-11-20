@@ -19,13 +19,13 @@ import {
   stats,
   topScored,
   type Db,
-} from "./store/db.ts";
-import { FIELDS, loadMarket, loadProfile, loadTracks } from "./config.ts";
-import { provider } from "./score/llm.ts";
-import { configDir, env, fail, loadEnv, log, ROOT, setConfigDir, templatesDir, today } from "./util.ts";
-import { runsDir } from "./audit.ts";
-import { extractProfile, readCv } from "./profile/extract.ts";
-import { profilePath, renderProfileYaml, writeProfile } from "./profile/write.ts";
+} from "../storage/db.ts";
+import { FIELDS, loadMarket, loadProfile, loadTracks } from "../engine/config.ts";
+import { provider } from "../engine/score/llm.ts";
+import { configDir, env, fail, loadEnv, log, ROOT, setConfigDir, templatesDir, today } from "../engine/util.ts";
+import { runsDir } from "../engine/audit.ts";
+import { extractProfile, readCv } from "../engine/profile/extract.ts";
+import { profilePath, renderProfileYaml, writeProfile } from "../engine/profile/write.ts";
 
 const ACTIONS = new Set([
   "sources",
@@ -112,8 +112,8 @@ async function serveStatic(pathname: string, res: ServerResponse): Promise<boole
   const name = pathname === "/" ? "index.html" : pathname.slice(1);
   if (name.includes("..") || name.includes("/") || name.includes("\\")) return false;
 
-  const file = join(ROOT, "public", name);
-  if (!resolve(file).startsWith(resolve(ROOT, "public") + sep)) return false;
+  const file = join(ROOT, "src", "ui", name);
+  if (!resolve(file).startsWith(resolve(ROOT, "src", "ui") + sep)) return false;
   if (!existsSync(file)) return false;
 
   const body = await readFile(file);
@@ -247,10 +247,9 @@ export function startServer(options: ServerOptions = {}) {
 
           const target = profilePath();
           const existed = existsSync(target);
-          if (existed) copyFileSync(target, `${target}.bak`);
 
           const generated = parse(
-            renderProfileYaml(extracted, basename(name), today(), loadMarket().country),
+            renderProfileYaml(extracted, basename(name), today()),
           ) as Record<string, unknown>;
 
           // A CV cannot express preferences. Uploading must not silently wipe the
@@ -304,7 +303,6 @@ export function startServer(options: ServerOptions = {}) {
           return;
         }
         const target = join(configDir(), "market.yaml");
-        if (existsSync(target)) copyFileSync(target, `${target}.bak`);
         copyFileSync(source, target);
         const m = loadMarket();
         json(res, 200, { market: { country: m.country, currency: m.currency, period: m.comp_period } });

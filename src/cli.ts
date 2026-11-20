@@ -8,28 +8,28 @@ import {
   recordDecision,
   STAGES,
   upsertBoards,
-} from "./store/db.ts";
-import { loadMarket, loadTracks } from "./config.ts";
-import { runAll, runCollect, runDigest, runScore } from "./pipeline.ts";
-import { runEval, printStats, funnelLines } from "./report.ts";
-import { detect } from "./discover.ts";
-import { availableMarkets, initConfig } from "./setup.ts";
-import { boardToCompany, discoverCompanies, parseBands, searchConfigured } from "./discovery.ts";
-import { collect, SOURCES } from "./ingest/index.ts";
-import { apiUrl, getJson } from "./ingest/types.ts";
+} from "./storage/db.ts";
+import { loadMarket, loadTracks } from "./engine/config.ts";
+import { runAll, runCollect, runDigest, runScore } from "./engine/pipeline.ts";
+import { runEval, printStats, funnelLines } from "./engine/report.ts";
+import { detect } from "./engine/discover.ts";
+import { availableMarkets, initConfig } from "./engine/setup.ts";
+import { boardToCompany, discoverCompanies, parseBands, searchConfigured } from "./engine/discovery.ts";
+import { collect, SOURCES } from "./engine/ingest/index.ts";
+import { apiUrl, getJson } from "./engine/ingest/types.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { basename } from "node:path";
-import { readCv, extractProfile } from "./profile/extract.ts";
-import { renderProfileYaml, writeProfile } from "./profile/write.ts";
-import { provider } from "./score/llm.ts";
-import { writeRunReport } from "./audit.ts";
+import { readCv, extractProfile } from "./engine/profile/extract.ts";
+import { renderProfileYaml, writeProfile } from "./engine/profile/write.ts";
+import { provider } from "./engine/score/llm.ts";
+import { writeRunReport } from "./engine/audit.ts";
 import {
   install as installSchedule,
   kickstart,
   status as scheduleStatus,
   uninstall as uninstallSchedule,
-} from "./schedule.ts";
+} from "./engine/schedule.ts";
 import {
   configDir,
   env,
@@ -40,7 +40,7 @@ import {
   templatesDir,
   today,
   warn,
-} from "./util.ts";
+} from "./engine/util.ts";
 
 const HELP = `JobPilot — personal job-search agent
 
@@ -274,7 +274,7 @@ async function main(): Promise<void> {
       log(`read ${cvText.length} characters from ${basename(target)}`);
 
       const extracted = await extractProfile(cvText);
-      const yaml = renderProfileYaml(extracted, basename(target), today(), loadMarket().country);
+      const yaml = renderProfileYaml(extracted, basename(target), today());
 
       if (args.includes("--dry")) {
         log("\n" + yaml);

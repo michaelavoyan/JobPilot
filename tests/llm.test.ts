@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { provider, requireModel } from "../src/score/llm.ts";
+import { provider, requireModel } from "../src/engine/score/llm.ts";
 
 const KEYS = [
   "ANTHROPIC_API_KEY",

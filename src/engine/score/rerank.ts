@@ -131,7 +131,7 @@ export async function scoreJobs(
   if (!requests.length) return outcome;
 
   const briefs = tracks.filter((t) => requests.some((r) => r.tracks.includes(t.key)));
-  const system = buildSystem(profile.country);
+  const system = buildSystem(loadMarket().country);
   let anyReportedCost = false;
 
   /**

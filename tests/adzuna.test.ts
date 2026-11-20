@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mapResults } from "../src/ingest/adzuna.ts";
-import type { Market } from "../src/config.ts";
+import { mapResults } from "../src/engine/ingest/adzuna.ts";
+import type { Market } from "../src/engine/config.ts";
 
 const market: Market = {
   country: "US",

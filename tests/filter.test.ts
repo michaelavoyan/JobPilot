@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hardFilter } from "../src/filter/rules.ts";
-import type { Market, Profile, Track } from "../src/config.ts";
-import type { Job } from "../src/types.ts";
+import { hardFilter } from "../src/engine/filter/rules.ts";
+import type { Market, Profile, Track } from "../src/engine/config.ts";
+import type { Job } from "../src/engine/types.ts";
 
 const profile: Profile = {
   name: "Test",
