@@ -83,3 +83,21 @@ The only thing that leaves is the job text sent to the AI that scores it.
 ## What it will not do
 
 It will not apply for you. It will not use LinkedIn. It will not send your data anywhere else.
+
+---
+
+## For contributors
+
+The code is four packages — `ui`, `server`, `engine`, `storage` — with the rules
+written down in [`AGENTS.md`](./AGENTS.md) and enforced by `npm test`.
+
+| Read | For |
+|---|---|
+| [`AGENTS.md`](./AGENTS.md) | the package rules, and where new code goes |
+| [`docs/ENGINE.md`](./docs/ENGINE.md) | diagrams: a run, discovery, the profile path |
+| [`docs/SERVER.md`](./docs/SERVER.md) | diagrams: routes and the live run stream |
+| [`docs/STORAGE.md`](./docs/STORAGE.md) | diagrams: the schema and its two key queries |
+| [`docs/DECISIONS.md`](./docs/DECISIONS.md) | why it is built this way, and what would reverse it |
+
+`npm test` type-checks and runs the suite; `npm run typecheck` runs only the
+compiler.
