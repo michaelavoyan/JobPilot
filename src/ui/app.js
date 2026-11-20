@@ -124,7 +124,8 @@ function renderMarkets(s) {
     select.dataset.filled = (s.markets ?? []).join(",");
   }
   if (wanted) select.value = wanted;
-  note("marketStatus", s.market ? `${s.market.currency} · salaries per ${s.market.period}` : "");
+  // Silence on success: the chosen country says enough. Errors still land here.
+  note("marketStatus", "");
 }
 
 function renderInterests(items) {
