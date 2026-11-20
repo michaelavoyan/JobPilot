@@ -72,14 +72,6 @@ The only thing that leaves is the job text sent to the AI that scores it.
 
 ---
 
-## If something goes wrong
-
-- **"Scoring is off"** — the AI key is missing or wrong.
-- **No matches** — the filters are strict. Add more companies, or lower the minimum score.
-- **A PDF is rejected** — it is a scan with no text inside. Export a text version.
-
----
-
 ## What it will not do
 
 It will not apply for you. It will not use LinkedIn. It will not send your data anywhere else.
