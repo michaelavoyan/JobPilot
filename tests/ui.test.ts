@@ -29,7 +29,7 @@ const baseState = {
   stats: { jobs: 1619, active: 1619, scored: 65, decisions: 2, rejects: 4810 },
   rejects: [],
   markets: ["il", "us"],
-  fields: [{ id: "it", label: "IT / Software / Computers" }],
+  fields: [{ id: "it", label: "Hi-Tech & Software" }],
   interests: ["platform engineering"],
   running: false,
 };
@@ -124,7 +124,7 @@ test("the field selector shows the single supported field and is locked", async 
   await settle();
   const select = dom.window.document.getElementById("field") as HTMLSelectElement;
   assert.equal(select.options.length, 1);
-  assert.equal(select.options[0].textContent, "IT / Software / Computers");
+  assert.equal(select.options[0].textContent, "Hi-Tech & Software");
   assert.equal(select.value, "it");
   assert.equal(select.disabled, true, "one option is a statement, not a choice");
   dom.window.close();
