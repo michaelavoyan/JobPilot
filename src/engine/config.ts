@@ -106,12 +106,30 @@ function readYaml<T>(name: string): T {
   return value;
 }
 
+/** What a profile file may contain: everything in Profile, with a partial
+ *  locations block, because a hand-written file often omits fields. */
+export type ProfileFile = Omit<Profile, "locations"> & {
+  locations?: Partial<ProfileLocations>;
+};
+
+function normaliseLocations(raw: Partial<ProfileLocations> | undefined): ProfileLocations {
+  return {
+    allowed: Array.isArray(raw?.allowed) ? raw.allowed : [],
+    regions: Array.isArray(raw?.regions) ? raw.regions : [],
+    commute_max_minutes: raw?.commute_max_minutes,
+    remote_ok: typeof raw?.remote_ok === "boolean" ? raw.remote_ok : true,
+    hybrid_ok: typeof raw?.hybrid_ok === "boolean" ? raw.hybrid_ok : true,
+    onsite_only_ok: typeof raw?.onsite_only_ok === "boolean" ? raw.onsite_only_ok : false,
+  };
+}
+
 /**
  * config/profile.yaml is generated from your CV (`npm run profile`) or copied
  * from templates/. It is input, never a hardcoded default.
  */
 export function loadProfile(): Profile {
-  const p = readYaml<Profile>("profile.yaml");
+  const file = readYaml<ProfileFile>("profile.yaml");
+  const p: Profile = { ...file, locations: normaliseLocations(file.locations) };
 
   if (!p.name || p.name === "Your Name") {
     throw new Error(
@@ -121,15 +139,6 @@ export function loadProfile(): Profile {
   }
   if (!p.experience) throw new Error(`${configDir()}/profile.yaml: experience block is required`);
 
-  const locations = (p.locations ?? {}) as Partial<ProfileLocations>;
-  p.locations = {
-    allowed: [],
-    regions: [],
-    remote_ok: true,
-    hybrid_ok: true,
-    onsite_only_ok: false,
-    ...locations,
-  };
   p.comp_floor = p.comp_floor ?? null;
   p.authorization_must_pass = p.authorization_must_pass ?? true;
   p.domains = p.domains ?? [];
