@@ -24,11 +24,24 @@ No searching. No scrolling. No LinkedIn.
 
 ## Getting started
 
-1. **Open JobPilot.**
-2. **Add your AI key** — asked once, when you first start.
-3. **Drop your CV** — PDF or Word.
-4. **Choose your country.**
-5. **Press Find jobs.**
+You need Node.js 24 or newer, and one AI key — DeepSeek, Anthropic, OpenAI or
+OpenCode Go.
+
+```bash
+cd ~/Development/JobPilot
+npm install
+npm run init -- --market il
+cp .env.example .env
+./start.sh
+```
+
+Paste your key into `.env`, save, and the page opens.
+
+Then, on the page:
+
+1. **Drop your CV** — PDF or Word.
+2. **Choose your country.**
+3. **Press Find jobs.**
 
 That is the whole setup.
 
@@ -75,3 +88,9 @@ written down in [`AGENTS.md`](./AGENTS.md) and enforced by `npm test`.
 
 `npm test` type-checks and runs the suite; `npm run typecheck` runs only the
 compiler.
+
+---
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
