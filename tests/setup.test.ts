@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { availableMarkets, initConfig } from "../src/engine/setup.ts";
+import { templatesDir } from "../src/engine/util.ts";
 
 const freshDir = () => mkdtempSync(join(tmpdir(), "jobpilot-init-"));
 
@@ -43,6 +44,11 @@ test("init keeps files that already exist", () => {
   const second = initConfig(dir, "il");
   assert.deepEqual(second.created, []);
   assert.deepEqual(second.kept.sort(), ["market.yaml", "profile.yaml", "tracks.yaml"]);
+});
+
+test("the profile template does not carry a country", () => {
+  const text = readFileSync(join(templatesDir(), "profile.yaml"), "utf8");
+  assert.ok(!/^country:/m.test(text), "country belongs to the market, not the CV");
 });
 
 test("an unknown market is rejected", () => {

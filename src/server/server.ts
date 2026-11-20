@@ -249,7 +249,7 @@ export function startServer(options: ServerOptions = {}) {
           const existed = existsSync(target);
 
           const generated = parse(
-            renderProfileYaml(extracted, basename(name), today(), loadMarket().country),
+            renderProfileYaml(extracted, basename(name), today()),
           ) as Record<string, unknown>;
 
           // A CV cannot express preferences. Uploading must not silently wipe the

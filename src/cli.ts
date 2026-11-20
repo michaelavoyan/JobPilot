@@ -274,7 +274,7 @@ async function main(): Promise<void> {
       log(`read ${cvText.length} characters from ${basename(target)}`);
 
       const extracted = await extractProfile(cvText);
-      const yaml = renderProfileYaml(extracted, basename(target), today(), loadMarket().country);
+      const yaml = renderProfileYaml(extracted, basename(target), today());
 
       if (args.includes("--dry")) {
         log("\n" + yaml);

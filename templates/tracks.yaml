@@ -1,5 +1,9 @@
 # Three genuinely different searches. One blended ranking collapses them,
 # so each track is filtered and scored separately against the same profile.
+#
+# Only put here what is specific to a track. Seniority traps (intern, junior,
+# student) live in the market file, and roles from another field (sales,
+# marketing, recruiting) are excluded by the field itself.
 
 tracks:
   # --- B: the volume track. Highest expected value. ---
@@ -12,11 +16,11 @@ tracks:
       A hands-on-but-managerial engineering leadership role with roughly 5-20
       reports, owning a mobile, platform, or client-side group. Must be a real
       people-management position, not a tech-lead-with-one-report role.
+    # Match titles in the language your market publishes in: English-only
+    # keywords silently drop postings whose title is Hebrew, German, and so on.
     title_include:
       - engineering manager
       - group lead
-      # Match titles in the language your market publishes in. English-only
-      # keywords silently drop postings whose title is Hebrew, German, etc.
       - engineering director
       - r&d manager
       - development manager
@@ -28,12 +32,8 @@ tracks:
       - full stack lead
       - team lead
     title_exclude:
-      - intern
-      - junior
-      - student
       - "vp "
       - chief
-      - "business development"
 
   # --- A: fewer roles, higher ceiling. ---
   a_director:
@@ -52,11 +52,7 @@ tracks:
       - vp engineering
       - engineering director
     title_exclude:
-      - intern
-      - junior
-      - student
-      - "director of sales"
-      - "director of marketing"
+      - "director of product"
 
   # --- C: your differentiator, but a tiny pool. ---
   c_ai_lead:
@@ -80,8 +76,4 @@ tracks:
       - engineering enablement
       - ai adoption
     title_exclude:
-      - intern
-      - junior
-      - student
       - data scientist
-      - "sales"
