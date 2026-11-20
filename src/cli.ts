@@ -9,11 +9,11 @@ import {
   STAGES,
   upsertBoards,
 } from "./store/db.ts";
-import { loadCompanies, loadMarket, loadTracks } from "./config.ts";
+import { loadMarket, loadTracks } from "./config.ts";
 import { runAll, runCollect, runDigest, runScore } from "./pipeline.ts";
 import { runEval, printStats, funnelLines } from "./report.ts";
-import { appendCompany, detect } from "./discover.ts";
-import { discoverCompanies, parseBands, searchConfigured } from "./discovery.ts";
+import { detect } from "./discover.ts";
+import { boardToCompany, discoverCompanies, parseBands, searchConfigured } from "./discovery.ts";
 import { collect, SOURCES } from "./ingest/index.ts";
 import { apiUrl, getJson } from "./ingest/types.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
@@ -196,7 +196,6 @@ async function main(): Promise<void> {
       const plan: [string, string][] = [
         ["profile.yaml", "profile.yaml"],
         ["tracks.yaml", "tracks.yaml"],
-        ["companies.yaml", "companies.yaml"],
         [`market.${requested}.yaml`, "market.yaml"],
       ];
 
@@ -221,7 +220,8 @@ async function main(): Promise<void> {
 
     case "sources": {
       const market = loadMarket();
-      const companies = loadCompanies();
+      const db = open();
+      const companies = listBoards(db).map((b) => boardToCompany(b));
       const enabled = SOURCES.filter((s) => market.sources?.[s.name]?.enabled === true);
 
       if (!enabled.length) {
@@ -233,7 +233,7 @@ async function main(): Promise<void> {
       for (const source of enabled) {
         const targets = companies.filter((c) => c.source === source.name).length;
         const count = perSource[source.name] ?? 0;
-        const state = count > 0 ? "ok" : targets === 0 ? "no companies configured" : "returned 0";
+        const state = count > 0 ? "ok" : targets === 0 ? "no boards in the directory" : "returned 0";
         log(`${source.name.padEnd(12)} ${String(count).padStart(5)} jobs   ${targets} company(ies)   ${state}`);
       }
       log(`\ntotal ${jobs.length} postings${errors.length ? `, ${errors.length} error(s)` : ""}`);
@@ -319,8 +319,16 @@ async function main(): Promise<void> {
       const nameIndex = args.indexOf("--name");
       const name = nameIndex >= 0 ? args[nameIndex + 1] : undefined;
       const { company, note } = await detect(url, name);
-      appendCompany(company);
-      log(`added: ${company.name} (${company.source})`);
+      const db = open();
+      upsertBoards(db, [
+        {
+          ats: company.source,
+          ident: company.slug ?? company.uid!,
+          token: company.token,
+          name: company.name,
+        },
+      ]);
+      log(`added to the directory: ${company.name} (${company.source})`);
       if (note) warn(note);
       log("verify with: npm run sources");
       return;

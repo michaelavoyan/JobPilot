@@ -183,20 +183,6 @@ export function loadMarket(): Market {
 
 /** Optional: the tenant directory in the database is the primary source, and
  *  this file only holds manual pins. */
-export function loadCompanies(): Company[] {
-  const path = resolve(configDir(), "companies.yaml");
-  if (!existsSync(path)) return [];
-  const raw = readYaml<{ companies: Company[] | null }>("companies.yaml");
-  const list = raw.companies ?? [];
-  const valid: Company[] = [];
-  for (const c of list) {
-    if (!c || !c.name || !c.source) continue;
-    if (c.source === "comeet" && (!c.uid || !c.token)) continue;
-    if (c.source !== "comeet" && !c.slug) continue;
-    valid.push(c);
-  }
-  return valid;
-}
 
 /** Changes whenever the profile or track briefs change, forcing a re-score. */
 export function profileHash(profile: Profile, tracks: Track[]): string {

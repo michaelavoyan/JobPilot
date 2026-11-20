@@ -27,7 +27,6 @@ test("templates ship every config file the tool needs", () => {
   for (const name of [
     "profile.yaml",
     "tracks.yaml",
-    "companies.yaml",
     "market.il.yaml",
     "market.us.yaml",
   ]) {
