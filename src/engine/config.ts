@@ -121,13 +121,14 @@ export function loadProfile(): Profile {
   }
   if (!p.experience) throw new Error(`${configDir()}/profile.yaml: experience block is required`);
 
+  const locations = (p.locations ?? {}) as Partial<ProfileLocations>;
   p.locations = {
     allowed: [],
     regions: [],
     remote_ok: true,
     hybrid_ok: true,
     onsite_only_ok: false,
-    ...(p.locations ?? {}),
+    ...locations,
   };
   p.comp_floor = p.comp_floor ?? null;
   p.authorization_must_pass = p.authorization_must_pass ?? true;

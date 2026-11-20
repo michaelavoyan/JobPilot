@@ -1,4 +1,5 @@
 import type { Job, Score } from "../types.ts";
+import { loadMarket } from "../config.ts";
 import type { Profile, Track } from "../config.ts";
 import { chat, estimateCost } from "./llm.ts";
 import { buildSystem, buildUser } from "./prompt.ts";
