@@ -31,6 +31,8 @@ const baseState = {
   markets: ["il", "us"],
   fields: [{ id: "it", label: "Hi-Tech & Software" }],
   interests: ["platform engineering"],
+  boards: 28,
+  discovery: { configured: false },
   running: false,
 };
 
@@ -138,6 +140,38 @@ test("the field and country selectors sit in different sections", async () => {
   const marketSection = doc.getElementById("market")!.closest(".step")!;
   assert.notEqual(fieldSection, marketSection);
   dom.window.close();
+});
+
+test("the companies step reports the directory size", async () => {
+  const dom = boot();
+  await settle();
+  assert.match(dom.window.document.getElementById("companiesNote")!.textContent ?? "", /28 companies/);
+  dom.window.close();
+});
+
+test("an empty directory is explained instead of showing a bare zero", async () => {
+  const dom = boot({ boards: 0 }, []);
+  await settle();
+  const note = dom.window.document.getElementById("companiesNote")!.textContent ?? "";
+  assert.match(note, /No companies yet/);
+  assert.match(
+    dom.window.document.getElementById("resultsHint")!.textContent ?? "",
+    /No companies yet/,
+    "the results panel must name the cause too",
+  );
+  dom.window.close();
+});
+
+test("bulk discovery is only offered when a search provider exists", async () => {
+  const off = boot({ discovery: { configured: false } });
+  await settle();
+  assert.equal((off.window.document.getElementById("findCompanies") as HTMLElement).hidden, true);
+  off.window.close();
+
+  const on = boot({ discovery: { configured: true } });
+  await settle();
+  assert.equal((on.window.document.getElementById("findCompanies") as HTMLElement).hidden, false);
+  on.window.close();
 });
 
 test("the field selector shows the single supported field and is locked", async () => {
