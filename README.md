@@ -101,6 +101,7 @@ written down in [`AGENTS.md`](./AGENTS.md) and enforced by `npm test`.
 | [`docs/ENGINE.md`](./docs/ENGINE.md) | diagrams: a run, discovery, the profile path |
 | [`docs/SERVER.md`](./docs/SERVER.md) | diagrams: routes and the live run stream |
 | [`docs/STORAGE.md`](./docs/STORAGE.md) | diagrams: the schema and its two key queries |
+| [`docs/LEARNING.md`](./docs/LEARNING.md) | how decisions become calibration, and how that is measured |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | why it is built this way, and what would reverse it |
 
 `npm test` type-checks and runs the suite; `npm run typecheck` runs only the
