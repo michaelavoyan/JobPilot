@@ -39,7 +39,7 @@ test("nothing is claimed from too few labels", () => {
   assert.equal(learning.skipped, 3);
   assert.equal(learning.suggestedMinScore, undefined, "two examples cannot set a threshold");
   assert.deepEqual(learning.appliedExamples, [], "no examples until the sample is usable");
-  assert.equal(renderLearning(learning), "", "nothing is injected into the prompt");
+  assert.equal(renderLearning(learning, ["b"]), "", "nothing is injected into the prompt");
 });
 
 test("a real gap yields a threshold at the midpoint", () => {
@@ -92,11 +92,27 @@ test("the prompt block states counts and disclaims itself", () => {
   seed(db, "applied", [80, 82, 85, 88, 90], "a");
   seed(db, "skipped", [40, 45, 50, 52, 55, 58, 60, 62, 64, 66], "s");
 
-  const text = renderLearning(buildLearning(db));
+  const text = renderLearning(buildLearning(db), ["b"]);
   assert.match(text, /5 applied, 10 skipped/);
   assert.match(text, /They applied to:/);
   assert.match(text, /They skipped:/);
   assert.match(text, /calibration evidence only/);
+});
+
+test("examples are scoped to the track being scored", () => {
+  const db = open(":memory:");
+  seed(db, "applied", [80, 82, 85, 88, 90], "a");
+  seed(db, "skipped", [40, 45, 50, 52, 55, 58, 60, 62, 64, 66], "s");
+
+  const learning = buildLearning(db);
+  assert.ok(renderLearning(learning, ["b"]).includes("## b"), "the track with labels is shown");
+  assert.equal(renderLearning(learning, ["c"]), "", "a track with no labels gets nothing");
+
+  // A track whose own sample is thinner than three gets no section.
+  upsertJobs(db, [job("lonely")]);
+  saveScores(db, [{ jobId: "lonely", track: "z", score: 75, reasons: [], flags: [] }], "m", "h");
+  recordDecision(db, "lonely", "applied");
+  assert.equal(renderLearning(buildLearning(db), ["z"]), "", "one label is not a pattern");
 });
 
 test("shortlisted counts as a positive decision", () => {

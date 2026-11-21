@@ -3,6 +3,11 @@
 What it takes to go from "calibration text injected into a prompt" to a loop
 that learns from decisions and **proves** it ranks better.
 
+> **Status.** L0 (measurement), L1 (per-track examples) and L2 (similarity
+> selection) are implemented, plus `learn --reset`. L3 (notes to constraints),
+> L4 (preference hints), the UI section of L5 and L6 (a calibrated comparison)
+> are **not** implemented — see §10 for what each needs.
+
 ---
 
 ## 1. Definition of complete

@@ -104,7 +104,8 @@ export function buildUser(
 
   parts.push("# CANDIDATE PROFILE\n" + buildProfileBlock(profile));
 
-  const learned = renderLearning(learning);
+  const batchTracks = [...new Set(items.flatMap((i) => i.tracks))];
+  const learned = renderLearning(learning, batchTracks);
   if (learned) parts.push("# WHAT THIS CANDIDATE HAS DECIDED\n" + learned);
 
   parts.push(
