@@ -30,7 +30,7 @@ import { FIELDS, loadMarket, loadProfile, loadTracks } from "../engine/config.ts
 import { detect } from "../engine/discover.ts";
 import { searchConfigured } from "../engine/discovery.ts";
 import { provider } from "../engine/score/llm.ts";
-import { buildLearning } from "../engine/learn.ts";
+import { buildLearning, LEARNING_VERSION } from "../engine/learn.ts";
 import { classifyNote, describeConstraint } from "../engine/notes.ts";
 import type { ConstraintKind } from "../engine/notes.ts";
 import { shadowStats } from "../engine/report.ts";
@@ -477,7 +477,7 @@ export function startServer(options: ServerOptions = {}) {
         }
         const learning = buildLearning(db, profile);
 
-        const pairs = shadowPairs(db);
+        const pairs = shadowPairs(db, LEARNING_VERSION);
         const labels = listDecisions(db);
         const compared = pairs.length
           ? shadowStats(

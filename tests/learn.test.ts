@@ -9,7 +9,7 @@ import {
   setConstraintStatus,
   upsertJobs,
 } from "../src/storage/db.ts";
-import { buildLearning, renderLearning } from "../src/engine/learn.ts";
+import { buildLearning, LEARNING_VERSION, renderLearning } from "../src/engine/learn.ts";
 import type { Job } from "../src/engine/types.ts";
 
 function job(id: string, description = "x"): Job {
@@ -95,6 +95,33 @@ test("calibration is reported per track", () => {
   const tracks = learning.trackCalibration.map((t) => t.track).sort();
   assert.deepEqual(tracks, ["b", "c"]);
   assert.equal(learning.trackCalibration.find((t) => t.track === "c")!.applied, 1);
+});
+
+test("the suggested bar actually reaches the prompt", () => {
+  const db = open(":memory:");
+  seed(db, "applied", [80, 82, 85, 88, 90], "a");
+  seed(db, "skipped", [40, 45, 50, 52, 55, 58, 60, 62, 64, 66], "s");
+
+  const learning = buildLearning(db);
+  assert.equal(learning.suggestedMinScore, 71);
+  assert.match(renderLearning(learning, ["b"]), /their bar is around 71/);
+});
+
+test("an overlapping sample states no bar in the prompt", () => {
+  const db = open(":memory:");
+  seed(db, "applied", [70, 72, 74, 76, 78], "a");
+  seed(db, "skipped", [68, 70, 72, 74, 76, 78, 80, 82, 84, 86], "s");
+
+  assert.doesNotMatch(renderLearning(buildLearning(db), ["b"]), /their bar is around/);
+});
+
+test("a track with its own separation is described in its own section", () => {
+  const db = open(":memory:");
+  seed(db, "applied", [80, 82, 85, 88, 90], "a");
+  seed(db, "skipped", [40, 45, 50, 52, 55, 58, 60, 62, 64, 66], "s");
+
+  const text = renderLearning(buildLearning(db), ["b"]);
+  assert.match(text, /In this track their applications score around 85, their skips around 57/);
 });
 
 test("the prompt block states counts and disclaims itself", () => {
@@ -258,3 +285,8 @@ function profileWith(stack: string[]) {
     tracks: [],
   } as unknown as Parameters<typeof buildLearning>[1];
 }
+
+test("the rules version is stable and short", () => {
+  assert.match(LEARNING_VERSION, /^[0-9a-f]{8}$/);
+  assert.equal(LEARNING_VERSION, LEARNING_VERSION, "same rules, same version");
+});

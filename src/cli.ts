@@ -3,6 +3,7 @@ import {
   funnelCounts,
   getJob,
   isStage,
+  learningRuns,
   listBoards,
   listConstraints,
   open,
@@ -67,6 +68,7 @@ const HELP = `JobPilot — personal job-search agent
   npm run learn -- --confirm <id>  accept a constraint; it reaches the scorer
   npm run learn -- --reject <id>   discard it
   npm run learn -- --reset         forget shadow scores and proposals; keep labels
+  npm run learn -- --history       the rule versions that produced recent scores
   npm run feedback -- <id> <stage> shortlisted | applied | screening | interview
                                    | offer | rejected | skipped
   npm run funnel                   application funnel and conversion rates
@@ -384,15 +386,29 @@ async function main(): Promise<void> {
 
       if (args.includes("--reset")) {
         const shadow = db.prepare("DELETE FROM shadow_scores").run();
+        const runs = db.prepare("DELETE FROM learning_runs").run();
         // Proposals are derived from notes; confirmed ones are the user's own
         // statements and survive. Labels always survive.
         const proposedRows = db
           .prepare("DELETE FROM learning_constraints WHERE status = 'proposed'")
           .run();
         log(
-          `forgot ${shadow.changes} shadow score(s) and ${proposedRows.changes} unconfirmed ` +
-            `constraint(s); your labels and confirmed constraints are untouched`,
+          `forgot ${shadow.changes} shadow score(s), ${runs.changes} learning run(s) and ` +
+            `${proposedRows.changes} unconfirmed constraint(s); your labels and confirmed ` +
+            `constraints are untouched`,
         );
+        return;
+      }
+
+      if (args.includes("--history")) {
+        const runs = learningRuns(db, 5);
+        if (!runs.length) {
+          log("no learning run has influenced a score yet");
+          return;
+        }
+        for (const r of runs) {
+          log(`${r.at}  rules ${r.version}  ${r.labels} labels`);
+        }
         return;
       }
 

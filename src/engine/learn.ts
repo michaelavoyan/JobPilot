@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Constraint, Db } from "../storage/db.ts";
 import { listConstraints } from "../storage/db.ts";
 import type { Profile } from "./config.ts";
@@ -66,6 +67,30 @@ const MIN_TERM = 4;
 /** A rate difference smaller than this is indistinguishable from noise. */
 const MIN_LIFT = 0.3;
 const MAX_PREFERENCES = 3;
+
+/**
+ * A fingerprint of the derivation rules, not of the labels.
+ *
+ * Scores produced under different rules are not comparable, so changing any of
+ * these gates changes the version, which makes `eval` ignore old pairs instead
+ * of quietly averaging two different methods together.
+ */
+export const LEARNING_VERSION = createHash("sha256")
+  .update(
+    JSON.stringify({
+      minApplied: MIN_APPLIED,
+      minSkipped: MIN_SKIPPED,
+      minGap: MIN_GAP,
+      minTrack: MIN_TRACK,
+      minTerm: MIN_TERM,
+      minLift: MIN_LIFT,
+      maxExamples: MAX_EXAMPLES,
+      maxPreferences: MAX_PREFERENCES,
+      signals: ["calibration", "examples", "preferences", "constraints"],
+    }),
+  )
+  .digest("hex")
+  .slice(0, 8);
 
 function median(values: number[]): number | undefined {
   if (!values.length) return undefined;
@@ -263,6 +288,20 @@ export function renderLearning(learning: LearningProfile | undefined, tracks: st
     if (!examples.applied.length && !examples.skipped.length) continue;
 
     const lines: string[] = [`## ${track}`];
+    const calibration = learning.trackCalibration.find((t) => t.track === track);
+    if (
+      calibration?.appliedMedian !== undefined &&
+      calibration.skippedMedian !== undefined &&
+      calibration.applied >= MIN_TRACK &&
+      calibration.skipped >= MIN_TRACK &&
+      calibration.appliedMedian - calibration.skippedMedian >= MIN_GAP
+    ) {
+      lines.push(
+        `In this track their applications score around ${calibration.appliedMedian}, ` +
+          `their skips around ${calibration.skippedMedian}.`,
+        "",
+      );
+    }
     if (examples.applied.length) {
       lines.push("They applied to:");
       for (const e of examples.applied) lines.push(`- ${e.title} at ${e.company} (${e.score})`);
@@ -295,6 +334,11 @@ export function renderLearning(learning: LearningProfile | undefined, tracks: st
   const head = hasLabels
     ? [
         `Learned from this candidate's own decisions (${learning.applied} applied, ${learning.skipped} skipped).`,
+        ...(learning.suggestedMinScore === undefined
+          ? []
+          : [
+              `Their applications sit well above their skips; their bar is around ${learning.suggestedMinScore}.`,
+            ]),
         "",
         ...sections,
         ...(sections.length && extra.length ? [""] : []),

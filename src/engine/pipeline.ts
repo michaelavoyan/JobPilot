@@ -5,6 +5,7 @@ import {
   finishRun,
   markEvaluated,
   recordRejects,
+  recordLearningRun,
   saveScores,
   saveShadowScores,
   startRun,
@@ -20,7 +21,7 @@ import { hardFilter } from "./filter/rules.ts";
 import { scoreJobs } from "./score/rerank.ts";
 import type { ScoreRequest } from "./score/rerank.ts";
 import { provider } from "./score/llm.ts";
-import { buildLearning } from "./learn.ts";
+import { buildLearning, LEARNING_VERSION, renderLearning } from "./learn.ts";
 import { renderDigest, writeDigest } from "./deliver/digest.ts";
 import { pushTelegram } from "./deliver/telegram.ts";
 import { numEnv, log, nowIso, warn } from "./util.ts";
@@ -183,7 +184,7 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
         concurrency: 1,
       });
       if (baseline.scores.length) {
-        saveShadowScores(db, baseline.scores, baseline.model);
+        saveShadowScores(db, baseline.scores, baseline.model, LEARNING_VERSION);
         log(`shadow-scored ${baseline.scores.length} posting(s) without learning`);
       }
     }
@@ -193,7 +194,21 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
     saveScores(db, outcome.scores, outcome.model, pHash, {
       variant: usingLearning ? "learned" : "baseline",
       learningAt: usingLearning ? nowIso() : undefined,
+      version: usingLearning ? LEARNING_VERSION : undefined,
     });
+
+    if (usingLearning) {
+      // The exact block that reached the model, so a past score can be
+      // explained rather than guessed at.
+      recordLearningRun(db, {
+        labels: learning.applied + learning.skipped,
+        version: LEARNING_VERSION,
+        payload: renderLearning(
+          learning,
+          tracks.map((t) => t.key),
+        ),
+      });
+    }
   }
   summary.scored = new Set(outcome.scores.map((s) => s.jobId)).size;
   summary.failed = outcome.failed.length;
