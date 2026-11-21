@@ -157,7 +157,7 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
     return summary;
   }
 
-  const learning = buildLearning(db);
+  const learning = buildLearning(db, profile);
   const usingLearning = learning.appliedExamples.length > 0;
   if (usingLearning) {
     log(`learning from ${learning.applied} applied and ${learning.skipped} skipped postings`);

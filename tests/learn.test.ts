@@ -1,10 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { open, recordDecision, saveScores, upsertJobs } from "../src/storage/db.ts";
+import {
+  listConstraints,
+  open,
+  proposeConstraints,
+  recordDecision,
+  saveScores,
+  setConstraintStatus,
+  upsertJobs,
+} from "../src/storage/db.ts";
 import { buildLearning, renderLearning } from "../src/engine/learn.ts";
 import type { Job } from "../src/engine/types.ts";
 
-function job(id: string): Job {
+function job(id: string, description = "x"): Job {
   return {
     id,
     source: "test",
@@ -13,7 +21,7 @@ function job(id: string): Job {
     url: "https://example.com",
     locations: ["Tel Aviv"],
     remote: false,
-    description: "x",
+    description,
     lang: "en",
     country: "IL",
   };
@@ -38,6 +46,7 @@ test("nothing is claimed from too few labels", () => {
   assert.equal(learning.applied, 2);
   assert.equal(learning.skipped, 3);
   assert.equal(learning.suggestedMinScore, undefined, "two examples cannot set a threshold");
+  assert.equal(learning.enoughLabels, false, "and the UI must not pretend they do");
   assert.deepEqual(learning.appliedExamples, [], "no examples until the sample is usable");
   assert.equal(renderLearning(learning, ["b"]), "", "nothing is injected into the prompt");
 });
@@ -50,6 +59,7 @@ test("a real gap yields a threshold at the midpoint", () => {
   const learning = buildLearning(db);
   // applied median 85, skipped median 56 -> midpoint 71
   assert.equal(learning.suggestedMinScore, 71);
+  assert.equal(learning.enoughLabels, true);
   assert.ok(learning.appliedExamples.length > 0);
   assert.ok(learning.skippedExamples.length > 0);
 });
@@ -124,3 +134,127 @@ test("shortlisted counts as a positive decision", () => {
   // Without any skips there is nothing to separate the two groups from.
   assert.equal(learning.suggestedMinScore, undefined);
 });
+
+/* ---------- constraints stated in notes ---------- */
+
+test("a proposal is not a constraint until it is confirmed", () => {
+  const db = open(":memory:");
+  proposeConstraints(db, [{ kind: "location_penalty", note: "too far" }]);
+
+  assert.deepEqual(buildLearning(db).constraints, [], "proposed is not confirmed");
+  assert.equal(listConstraints(db, "proposed").length, 1);
+});
+
+test("confirmed constraints reach the prompt, with the user's own words", () => {
+  const db = open(":memory:");
+  proposeConstraints(db, [{ kind: "domain_penalty", value: "adtech", note: "no more adtech" }]);
+  setConstraintStatus(db, "domain_penalty:adtech", "confirmed");
+
+  const text = renderLearning(buildLearning(db), []);
+  assert.match(text, /adtech/);
+  assert.match(text, /no more adtech/, "the note is quoted, not paraphrased");
+});
+
+test("a constraint alone does not claim there are decisions behind it", () => {
+  const db = open(":memory:");
+  proposeConstraints(db, [{ kind: "location_penalty", note: "too far" }]);
+  setConstraintStatus(db, "location_penalty", "confirmed");
+
+  const text = renderLearning(buildLearning(db), []);
+  assert.match(text, /too far/);
+  assert.doesNotMatch(text, /0 applied, 0 skipped/);
+});
+
+test("a rejected constraint never reaches the prompt", () => {
+  const db = open(":memory:");
+  proposeConstraints(db, [{ kind: "location_penalty", note: "too far" }]);
+  setConstraintStatus(db, "location_penalty", "rejected");
+
+  assert.deepEqual(buildLearning(db).constraints, []);
+  assert.equal(renderLearning(buildLearning(db), []), "");
+});
+
+test("the same constraint from two notes is stored once", () => {
+  const db = open(":memory:");
+  const first = proposeConstraints(db, [{ kind: "location_penalty", note: "too far" }]);
+  const second = proposeConstraints(db, [{ kind: "location_penalty", note: "commute is long" }]);
+  assert.equal(first, 1);
+  assert.equal(second, 0);
+  assert.equal(listConstraints(db).length, 1);
+});
+
+/* ---------- preferences derived from labels ---------- */
+
+test("a term must appear often enough before it is called a preference", () => {
+  const db = open(":memory:");
+  seedWith(db, "applied", [80], "a", "we use kubernetes");
+  seedWith(db, "skipped", [50], "s", "we use kubernetes");
+
+  const learning = buildLearning(db, profileWith(["kubernetes"]));
+  assert.deepEqual(learning.preferences, [], "two mentions prove nothing");
+});
+
+test("a term concentrated in applications becomes a preference", () => {
+  const db = open(":memory:");
+  seedWith(db, "applied", [78, 82, 84, 86], "a", "platform engineering in node");
+  seedWith(db, "skipped", [50, 52], "s", "backend services in java");
+
+  const learning = buildLearning(db, profileWith(["node"]));
+  assert.equal(learning.preferences.length, 1);
+  assert.equal(learning.preferences[0].term, "node");
+  assert.equal(learning.preferences[0].applied, 4);
+  assert.equal(learning.preferences[0].skipped, 0);
+});
+
+test("a term that appears equally on both sides is not a preference", () => {
+  const db = open(":memory:");
+  seedWith(db, "applied", [82, 84], "a", "node platform");
+  seedWith(db, "skipped", [50, 52], "s", "node backend");
+
+  assert.deepEqual(buildLearning(db, profileWith(["node"])).preferences, []);
+});
+
+test("preferences and constraints are rendered side by side", () => {
+  const db = open(":memory:");
+  seedWith(db, "applied", [78, 82, 84, 86], "a", "node platform");
+  seedWith(db, "skipped", [50, 52], "s", "java backend");
+  proposeConstraints(db, [{ kind: "domain_penalty", value: "adtech", note: "no more adtech" }]);
+  setConstraintStatus(db, "domain_penalty:adtech", "confirmed");
+
+  const text = renderLearning(buildLearning(db, profileWith(["node"])), []);
+  assert.match(text, /mention these more often/);
+  assert.match(text, /- node/);
+  assert.match(text, /stated these constraints themselves/);
+  assert.match(text, /adtech/);
+});
+
+/** n labelled postings at the given scores, each with the same description. */
+function seedWith(
+  db: ReturnType<typeof open>,
+  label: string,
+  scores: number[],
+  prefix: string,
+  description: string,
+) {
+  scores.forEach((score, i) => {
+    const id = `${prefix}${i}`;
+    upsertJobs(db, [job(id, description)]);
+    saveScores(db, [{ jobId: id, track: "b", score, reasons: [], flags: [] }], "m", "h");
+    recordDecision(db, id, label);
+  });
+}
+
+function profileWith(stack: string[]) {
+  return {
+    name: "t",
+    country: "IL",
+    experience: { total_years: 10, management_years: 4 },
+    domains: [],
+    interests: [],
+    stack,
+    ai_practice: [],
+    people_management: [],
+    locations: { allowed: [], regions: [], remote_ok: true, hybrid_ok: true, onsite_only_ok: true },
+    tracks: [],
+  } as unknown as Parameters<typeof buildLearning>[1];
+}

@@ -18,3 +18,4 @@ usage in [`../README.md`](../README.md).
 | 11 | Decisions are reversible | Skip and Applied hide postings permanently; misclicks must be undoable | Never |
 | 12 | No build step | TypeScript on Node, SQLite in Node, three plain files for the page | The page needs several views with shared state |
 | 13 | Learning is calibration, not training | Labels show where the user's bar actually sits and supply worked examples; no weights change and no prompt is rewritten from a handful of clicks | A sample large enough to fit a real preference model — hundreds of labels, not thirty |
+| 14 | Constraints from notes are confirmed, never inferred into effect | A misread note that silently narrows a search is indistinguishable from "nothing matched"; the classifier is lexical, and a proposal changes nothing until the user accepts it | A note classifier accurate enough to act without review |

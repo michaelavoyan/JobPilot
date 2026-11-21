@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { auc, bootstrapAuc, shadowStats } from "../src/engine/report.ts";
+import { open, saveScores, saveShadowScores, shadowPairs, upsertJobs } from "../src/storage/db.ts";
+import type { Job } from "../src/engine/types.ts";
 
 test("a clean separation gives an AUC of 1", () => {
   assert.equal(auc([80, 90], [40, 50]), 1);
@@ -69,4 +71,64 @@ test("unlabelled pairs contribute to counts but not to AUC", () => {
   assert.equal(stats.n, 1);
   assert.equal(stats.labelled, 0);
   assert.equal(stats.aucLearned, undefined, "no labels, no conclusion");
+});
+
+function job(id: string): Job {
+  return {
+    id,
+    source: "test",
+    company: "c",
+    title: "t",
+    url: "https://example.com",
+    locations: [],
+    remote: true,
+    description: "x",
+    lang: "en",
+    country: "IL",
+  };
+}
+
+test("precision compares the best few under each variant", () => {
+  const stats = shadowStats([
+    { jobId: "a", learned: 90, baseline: 60, label: "applied" },
+    { jobId: "b", learned: 80, baseline: 90, label: "skipped" },
+    { jobId: "c", learned: 30, baseline: 80, label: "applied" },
+  ]);
+
+  // k=3: both variants rank all three, so precision is the same 2/3.
+  assert.equal(stats.precision?.k, 3);
+  assert.equal(stats.precision?.learned, 2 / 3);
+  assert.equal(stats.precision?.baseline, 2 / 3);
+});
+
+test("precision is capped at ten and undefined without labels", () => {
+  const pairs = Array.from({ length: 12 }, (_, i) => ({
+    jobId: `j${i}`,
+    learned: 50 + i,
+    baseline: 50 + i,
+    label: i < 6 ? "applied" : "skipped",
+  }));
+  assert.equal(shadowStats(pairs).precision?.k, 10);
+
+  const unlabelled = shadowStats([{ jobId: "a", learned: 80, baseline: 70 }]);
+  assert.equal(unlabelled.precision, undefined);
+});
+
+test("shadow scores round-trip and pair with the learned score", () => {
+  const db = open(":memory:");
+  upsertJobs(db, [job("a")]);
+  saveScores(db, [{ jobId: "a", track: "b", score: 82, reasons: [], flags: [] }], "m", "h", {
+    variant: "learned",
+    learningAt: "2026-01-01T00:00:00.000Z",
+  });
+  saveShadowScores(db, [{ jobId: "a", track: "b", score: 70, reasons: [], flags: [] }], "m");
+
+  assert.deepEqual(shadowPairs(db), [{ jobId: "a", track: "b", learned: 82, baseline: 70 }]);
+});
+
+test("a posting scored only once way is not a pair", () => {
+  const db = open(":memory:");
+  upsertJobs(db, [job("a")]);
+  saveScores(db, [{ jobId: "a", track: "b", score: 82, reasons: [], flags: [] }], "m", "h");
+  assert.deepEqual(shadowPairs(db), []);
 });

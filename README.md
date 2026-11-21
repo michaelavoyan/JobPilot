@@ -31,6 +31,10 @@ actually sits, and shows the model a few of your own applied and skipped
 postings as worked examples. The more you label, the closer the scores get to
 your real judgement.
 
+If you write a note when you skip something — "too far", "no more adtech" — the
+agent reads it and proposes a rule. Nothing changes until you confirm it, and
+every confirmed rule stays visible so you can remove it.
+
 It does not invent a preference you never expressed, and it never moves your
 threshold on its own — `npm run learn` tells you what it would suggest.
 

@@ -42,6 +42,18 @@ CREATE TABLE IF NOT EXISTS scores (
   PRIMARY KEY (job_id, track)
 );
 
+-- Constraints inferred from the user's own notes. Never applied until the
+-- user confirms them: a misread note must not narrow a search silently.
+CREATE TABLE IF NOT EXISTS learning_constraints (
+  id      TEXT PRIMARY KEY,
+  kind    TEXT NOT NULL,
+  value   TEXT,
+  note    TEXT NOT NULL,
+  job_id  TEXT,
+  status  TEXT NOT NULL DEFAULT 'proposed',
+  at      TEXT NOT NULL
+);
+
 -- The same posting scored without learning, so the two can be compared.
 CREATE TABLE IF NOT EXISTS shadow_scores (
   job_id TEXT NOT NULL,
@@ -468,6 +480,73 @@ export function saveShadowScores(
     db.exec("ROLLBACK");
     throw err;
   }
+}
+
+export interface Constraint {
+  id: string;
+  kind: string;
+  value?: string;
+  note: string;
+  jobId?: string;
+  status: "proposed" | "confirmed" | "rejected";
+  at: string;
+}
+
+/** Adds what is not already known, in either direction. Returns the new count. */
+export function proposeConstraints(
+  db: Db,
+  items: { kind: string; value?: string; note: string; jobId?: string }[],
+): number {
+  if (!items.length) return 0;
+  const known = new Set(
+    (db.prepare("SELECT kind, value FROM learning_constraints").all() as Row[]).map(
+      (r) => (r.value ? `${r.kind}:${r.value}` : String(r.kind)),
+    ),
+  );
+  const stmt = db.prepare(
+    "INSERT OR IGNORE INTO learning_constraints (id, kind, value, note, job_id, status, at) VALUES (?,?,?,?,?, 'proposed', ?)",
+  );
+  const at = nowIso();
+  let added = 0;
+  db.exec("BEGIN");
+  try {
+    for (const item of items) {
+      const key = item.value ? `${item.kind}:${item.value}` : item.kind;
+      if (known.has(key)) continue;
+      known.add(key);
+      stmt.run(key, item.kind, item.value ?? null, item.note, item.jobId ?? null, at);
+      added++;
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  return added;
+}
+
+export function listConstraints(db: Db, status?: Constraint["status"]): Constraint[] {
+  const rows = (
+    status
+      ? db.prepare("SELECT * FROM learning_constraints WHERE status = ? ORDER BY at").all(status)
+      : db.prepare("SELECT * FROM learning_constraints ORDER BY at").all()
+  ) as Row[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    kind: String(r.kind),
+    value: r.value ? String(r.value) : undefined,
+    note: String(r.note),
+    jobId: r.job_id ? String(r.job_id) : undefined,
+    status: String(r.status) as Constraint["status"],
+    at: String(r.at),
+  }));
+}
+
+export function setConstraintStatus(db: Db, id: string, status: Constraint["status"]): boolean {
+  const res = db
+    .prepare("UPDATE learning_constraints SET status = ? WHERE id = ?")
+    .run(status, id);
+  return Number(res.changes) > 0;
 }
 
 /** Every posting scored both ways, for the learning comparison. */

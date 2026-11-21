@@ -142,6 +142,8 @@ export function shadowStats(pairs: ShadowPair[]): {
   aucLearned?: number;
   aucBaseline?: number;
   aucCi?: { low: number; high: number };
+  /** Of the best few labelled postings under each variant, how many were applied to. */
+  precision?: { k: number; learned: number; baseline: number };
 } {
   if (!pairs.length) {
     return { n: 0, labelled: 0, meanDelta: 0, agreement: 0 };
@@ -160,6 +162,13 @@ export function shadowStats(pairs: ShadowPair[]): {
   const basePos = positives.map((p) => p.baseline);
   const baseNeg = negatives.map((p) => p.baseline);
 
+  const k = Math.min(10, labelled.length);
+  const positive = (p: ShadowPair) => p.label === "applied" || p.label === "shortlisted";
+  const at = (key: "learned" | "baseline") =>
+    k
+      ? [...labelled].sort((a, b) => b[key] - a[key]).slice(0, k).filter(positive).length / k
+      : 0;
+
   return {
     n: pairs.length,
     labelled: labelled.length,
@@ -168,6 +177,7 @@ export function shadowStats(pairs: ShadowPair[]): {
     aucLearned: auc(learnedPos, learnedNeg),
     aucBaseline: auc(basePos, baseNeg),
     aucCi: bootstrapAuc(learnedPos, learnedNeg),
+    precision: k ? { k, learned: at("learned"), baseline: at("baseline") } : undefined,
   };
 }
 
@@ -261,6 +271,12 @@ export function runEval(db: Db, tracks: Track[]): void {
     log("\nlearning compared with baseline (same postings, scored twice):");
     log(`  ${stats.n} posting(s), ${stats.labelled} labelled`);
     log(`  mean change ${stats.meanDelta > 0 ? "+" : ""}${stats.meanDelta} points · ${Math.round(stats.agreement * 100)}% agree within 5`);
+    if (stats.precision) {
+      log(
+        `  of the top ${stats.precision.k} labelled: ${Math.round(stats.precision.learned * 100)}% applied ` +
+          `with learning, ${Math.round(stats.precision.baseline * 100)}% without`,
+      );
+    }
     if (stats.aucLearned !== undefined && stats.aucBaseline !== undefined && stats.aucCi) {
       log(
         `  AUC learned ${stats.aucLearned.toFixed(2)} (95% CI ${stats.aucCi.low.toFixed(2)}–${stats.aucCi.high.toFixed(2)}) ` +
