@@ -140,3 +140,55 @@ test("pushTelegram escapes HTML in titles", async () => {
     server.close();
   }
 });
+
+test("pushTelegram survives a network failure", async () => {
+  // A port that was free an instant ago: connect is refused, the call must
+  // return false rather than take the run down with an unhandled rejection.
+  const probe = createServer(() => {});
+  await new Promise<void>((r) => probe.listen(0, "127.0.0.1", r));
+  const port = (probe.address() as AddressInfo).port;
+  await new Promise<void>((r) => probe.close(() => r()));
+
+  await withEnv(
+    {
+      TELEGRAM_BOT_TOKEN: "123:abc",
+      TELEGRAM_CHAT_ID: "42",
+      TELEGRAM_API_BASE: `http://127.0.0.1:${port}`,
+    },
+    async () => {
+      assert.equal(await pushTelegram([job()]), false);
+    },
+  );
+});
+
+test("pushTelegram sends no more postings than asked", async () => {
+  let body = "";
+  const server = createServer((req, res) => {
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("{}");
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as AddressInfo).port;
+  const jobs = Array.from({ length: 8 }, (_, i) => job({ id: `j${i}`, title: `Role ${i}` }));
+
+  try {
+    await withEnv(
+      {
+        TELEGRAM_BOT_TOKEN: "t",
+        TELEGRAM_CHAT_ID: "1",
+        TELEGRAM_API_BASE: `http://127.0.0.1:${port}`,
+      },
+      async () => {
+        await pushTelegram(jobs, 3);
+      },
+    );
+    assert.match(body, /8 matches/);
+    assert.match(body, /Role 2/);
+    assert.ok(!body.includes("Role 3"), "the fourth posting is not included");
+  } finally {
+    server.close();
+  }
+});

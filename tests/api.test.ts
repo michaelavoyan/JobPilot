@@ -1,9 +1,81 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AddressInfo } from "node:net";
+import { setConfigDir } from "../src/engine/util.ts";
+import { listDecisions, open, saveScores, upsertJobs } from "../src/storage/db.ts";
+import type { Job } from "../src/engine/types.ts";
 import { startServer } from "../src/server/server.ts";
 
-// Read-only routes only: these tests must never write to the user's database.
+/**
+ * A disposable config. The suite must never read or write the installation the
+ * user is actually using, which is what it did while these routes were only
+ * exercised with GETs.
+ */
+const dir = mkdtempSync(join(tmpdir(), "jobpilot-api-"));
+writeFileSync(
+  join(dir, "market.yaml"),
+  [
+    "country: IL",
+    "currency: ILS",
+    "comp_period: month",
+    "country_names: [Israel]",
+    "currency_markers: { ILS: ['₪'] }",
+    "sources: {}",
+    "clearance_patterns: []",
+    "exclude_title_patterns: []",
+    "city_aliases: {}",
+    "remote_deny_regions: []",
+  ].join("\n"),
+  "utf8",
+);
+writeFileSync(
+  join(dir, "profile.yaml"),
+  [
+    "name: Test Candidate",
+    "field: it",
+    "experience: { total_years: 12, management_years: 4 }",
+    "domains: [mobile]",
+    "stack: [Kotlin]",
+  ].join("\n"),
+  "utf8",
+);
+writeFileSync(
+  join(dir, "tracks.yaml"),
+  "tracks:\n  b:\n    label: Senior EM\n    brief: leads a team\n    title_include: [manager]\n",
+  "utf8",
+);
+setConfigDir(dir);
+
+function job(id: string, title: string): Job {
+  return {
+    id,
+    source: "test",
+    company: "Acme",
+    title,
+    url: "https://example.com/job",
+    locations: ["Tel Aviv"],
+    remote: false,
+    description: "Lead the team.",
+    lang: "en",
+    country: "IL",
+  };
+}
+
+const db = open();
+upsertJobs(db, [job("job-1", "Engineering Manager"), job("job-2", "Support Lead")]);
+saveScores(
+  db,
+  [
+    { jobId: "job-1", track: "b", score: 88, reasons: ["fits"], flags: ["org_size_unclear"] },
+    { jobId: "job-2", track: "b", score: 40, reasons: ["not a fit"], flags: [] },
+  ],
+  "stub",
+  "hash",
+);
+
 const server = startServer({ port: 0 });
 const port = await new Promise<number>((resolve) => {
   if (server.listening) {
@@ -14,7 +86,16 @@ const port = await new Promise<number>((resolve) => {
 });
 const base = `http://127.0.0.1:${port}`;
 
-after(() => server.close());
+after(() => {
+  server.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+const json = (body: unknown) => ({
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(body),
+});
 
 test("health answers", async () => {
   const res = await fetch(`${base}/api/health`);
@@ -42,10 +123,9 @@ test("jobs returns matches, a total and a posting count", async () => {
     total: number;
     postings: number;
   };
-  assert.ok(Array.isArray(body.jobs));
-  assert.equal(typeof body.total, "number");
-  assert.equal(typeof body.postings, "number");
-  assert.ok(body.jobs.length <= 3, "the limit is respected");
+  assert.equal(body.jobs.length, 2);
+  assert.equal(body.total, 2);
+  assert.equal(body.postings, 2);
 });
 
 test("api responses are never cached", async () => {
@@ -72,6 +152,84 @@ test("unknown routes are 404", async () => {
 
 test("path traversal is refused", async () => {
   assert.equal((await fetch(`${base}/../package.json`)).status, 404);
+});
+
+test("a decision is recorded, hides the posting, and can be undone", async () => {
+  const res = await fetch(`${base}/api/feedback`, json({ jobId: "job-1", label: "applied" }));
+  assert.equal(res.status, 200);
+
+  let ids = listDecisions(db).map((d) => d.jobId);
+  assert.ok(ids.includes("job-1"), "the decision is stored");
+
+  const listed = (await (await fetch(`${base}/api/jobs?min=0`)).json()) as { jobs: { id: string }[] };
+  assert.equal(
+    listed.jobs.some((j) => j.id === "job-1"),
+    false,
+    "a decided posting is hidden from the list",
+  );
+
+  assert.equal((await fetch(`${base}/api/undo`, json({ jobId: "job-1" }))).status, 200);
+  ids = listDecisions(db).map((d) => d.jobId);
+  assert.equal(ids.includes("job-1"), false, "undo clears it");
+});
+
+test("a note on a decision proposes a constraint but changes nothing", async () => {
+  await fetch(`${base}/api/feedback`, json({ jobId: "job-2", label: "skipped", note: "no more adtech" }));
+
+  const learning = (await (await fetch(`${base}/api/learning`)).json()) as {
+    constraints: { id: string; status: string }[];
+  };
+  const proposed = learning.constraints.find((c) => c.id === "domain_penalty:adtech");
+  assert.ok(proposed, "the note is read");
+  assert.equal(proposed.status, "proposed", "nothing is applied before confirmation");
+});
+
+test("a proposed constraint can be confirmed and then removed", async () => {
+  const confirm = await fetch(
+    `${base}/api/learning/constraint`,
+    json({ id: "domain_penalty:adtech", status: "confirmed" }),
+  );
+  assert.equal(confirm.status, 200);
+
+  const rejected = await fetch(
+    `${base}/api/learning/constraint`,
+    json({ id: "domain_penalty:adtech", status: "rejected" }),
+  );
+  assert.equal(rejected.status, 200);
+
+  const learning = (await (await fetch(`${base}/api/learning`)).json()) as {
+    constraints: { id: string; status: string }[];
+  };
+  assert.equal(
+    learning.constraints.find((c) => c.id === "domain_penalty:adtech")?.status,
+    "rejected",
+  );
+});
+
+test("feedback rejects an unknown posting and a bad stage", async () => {
+  assert.equal(
+    (await fetch(`${base}/api/feedback`, json({ jobId: "nope", label: "applied" }))).status,
+    404,
+  );
+  assert.equal(
+    (await fetch(`${base}/api/feedback`, json({ jobId: "job-1", label: "maybe" }))).status,
+    400,
+  );
+});
+
+test("interests are saved and come back in state", async () => {
+  const res = await fetch(`${base}/api/interests`, json({ interests: ["platform", "node"] }));
+  assert.equal(res.status, 200);
+
+  const state = (await (await fetch(`${base}/api/state`)).json()) as { interests: string[] };
+  assert.deepEqual(state.interests, ["platform", "node"]);
+  assert.match(readFileSync(join(dir, "profile.yaml"), "utf8"), /platform/);
+});
+
+test("an unsupported field is refused before it is written", async () => {
+  const res = await fetch(`${base}/api/field`, json({ field: "finance" }));
+  assert.equal(res.status, 400);
+  assert.doesNotMatch(readFileSync(join(dir, "profile.yaml"), "utf8"), /finance/);
 });
 
 test("a request from another site is refused", async () => {
@@ -115,4 +273,13 @@ test("a body that is not JSON is refused before it is parsed", async () => {
     body: JSON.stringify({ jobId: "x" }),
   });
   assert.equal(res.status, 415);
+});
+
+test("an oversized body is refused with 413", async () => {
+  const res = await fetch(`${base}/api/undo`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jobId: "x", padding: "x".repeat(1_100_000) }),
+  });
+  assert.equal(res.status, 413);
 });
