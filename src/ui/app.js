@@ -49,8 +49,10 @@ function lockControls(locked) {
 async function loadState() {
   try {
     const s = await (await fetch("/api/state")).json();
+    state.boards = s.boards ?? 0;
     renderPills(s);
     renderProfile(s);
+    renderCompanies(s);
     renderField(s);
     renderMarkets(s);
     renderInterests(s.interests ?? []);
@@ -97,6 +99,27 @@ function renderProfile(s) {
     `${p.years} years experience · ${p.managementYears} in management · ${p.stack} technologies`,
   );
   search.disabled = Boolean(s.running);
+}
+
+function renderCompanies(s) {
+  const boards = s.boards ?? 0;
+  const url = $("companyUrl");
+  const add = $("addCompany");
+  const bulk = $("findCompanies");
+
+  // Bulk discovery needs a search provider; the single-URL path never does.
+  bulk.hidden = !(s.discovery?.configured ?? false);
+
+  if (boards > 0) {
+    note("companiesNote", `${boards} companies`);
+    return;
+  }
+  // The one state a user cannot diagnose alone: nothing to search.
+  note(
+    "companiesNote",
+    "No companies yet. Add a careers page URL, or the search will only read the global remote feed.",
+    "warn",
+  );
 }
 
 function renderField(s) {
@@ -289,12 +312,12 @@ function setRunning(running) {
   else $("search").textContent = "Find jobs";
 }
 
-function search() {
+function streamRun(url, startLabel, onDone) {
   if (state.running) return;
   setRunning(true);
-  noteBusy("searchStatus", "Collecting postings…");
+  noteBusy("searchStatus", startLabel);
 
-  const es = new EventSource("/api/run?action=run");
+  const es = new EventSource(url);
   let finished = false;
 
   es.addEventListener("log", (event) => {
@@ -304,11 +327,10 @@ function search() {
   });
 
   es.addEventListener("done", (event) => {
-    const { code, summary } = JSON.parse(event.data);
     finished = true;
     es.close();
     setRunning(false);
-    note("searchStatus", code === 0 ? describeRun(summary) : "Finished with errors — see Advanced.", code === 0 ? "" : "bad");
+    onDone(JSON.parse(event.data));
     loadState();
     loadJobs();
   });
@@ -317,11 +339,61 @@ function search() {
     if (finished) return;
     es.close();
     setRunning(false);
-    note("searchStatus", "Connection lost — see Advanced.", "bad");
+    note("searchStatus", "Connection lost — try again.", "bad");
   };
 }
 
+function search() {
+  streamRun("/api/run?action=run", "Collecting postings…", ({ code, summary }) => {
+    note(
+      "searchStatus",
+      code === 0 ? describeRun(summary) : "Finished with errors — see runs/ for the log.",
+      code === 0 ? "" : "bad",
+    );
+  });
+}
+
+function findCompanies() {
+  streamRun(
+    "/api/run?action=discover-web&bands=1-20,21-100,101-500",
+    "Looking for companies…",
+    ({ code }) => {
+      note(
+        "searchStatus",
+        code === 0 ? "Companies updated." : "Discovery stopped — check the search key in .env.",
+        code === 0 ? "" : "bad",
+      );
+    },
+  );
+}
+
+async function addCompany() {
+  const url = $("companyUrl").value.trim();
+  if (!url) return;
+  $("addCompany").disabled = true;
+  note("companiesNote", "Checking that board…");
+  const res = await fetch("/api/discover", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  const data = await res.json().catch(() => ({}));
+  $("addCompany").disabled = false;
+  if (!res.ok) {
+    note("companiesNote", data.error ?? "could not add that URL", "bad");
+    return;
+  }
+  $("companyUrl").value = "";
+  await loadState();
+  loadJobs();
+}
+
 $("search").addEventListener("click", search);
+$("addCompany").addEventListener("click", addCompany);
+$("findCompanies").addEventListener("click", findCompanies);
+$("companyUrl").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") addCompany();
+});
 
 /** The funnel, in one line: what was fetched, filtered, scored, skipped. */
 function describeRun(summary) {
@@ -353,9 +425,15 @@ async function loadJobs() {
 
   // Only postings that survived the filters and were scored exist here, so the
   // count is the search result — not the size of the database.
-  $("resultsHint").textContent = matches
-    ? `${matches.toLocaleString("en-US")} match${matches === 1 ? "" : "es"}`
-    : `No matches at ${min} or above`;
+  const boards = state.boards ?? 0;
+  if (matches) {
+    $("resultsHint").textContent = `${matches.toLocaleString("en-US")} match${matches === 1 ? "" : "es"}`;
+  } else if (boards === 0) {
+    $("resultsHint").textContent =
+      "No companies yet — add a careers page URL above, then search again.";
+  } else {
+    $("resultsHint").textContent = `No matches at ${min} or above`;
+  }
 
   for (const job of jobs) list.appendChild(renderJob(job));
 }

@@ -9,6 +9,8 @@ import {
   clearDecision,
   countScored,
   findJobByPrefix,
+  listBoards,
+  upsertBoards,
   getJob,
   isStage,
   open,
@@ -21,6 +23,8 @@ import {
   type Db,
 } from "../storage/db.ts";
 import { FIELDS, loadMarket, loadProfile, loadTracks } from "../engine/config.ts";
+import { detect } from "../engine/discover.ts";
+import { searchConfigured } from "../engine/discovery.ts";
 import { provider } from "../engine/score/llm.ts";
 import { configDir, env, fail, loadEnv, log, ROOT, setConfigDir, templatesDir, today } from "../engine/util.ts";
 import { runsDir } from "../engine/audit.ts";
@@ -28,6 +32,7 @@ import { extractProfile, readCv } from "../engine/profile/extract.ts";
 import { profilePath, renderProfileYaml, writeProfile } from "../engine/profile/write.ts";
 
 const ACTIONS = new Set([
+  "discover-web",
   "sources",
   "collect",
   "score",
@@ -81,6 +86,11 @@ export function buildRunSpec(q: URLSearchParams, cfgDir?: string): RunSpec {
     if (minScore !== undefined) env.MIN_SCORE = String(minScore);
     const rows = intParam(q, "maxRows", 1, 100);
     if (rows) env.MAX_DIGEST_ROWS = String(rows);
+  }
+
+  if (action === "discover-web") {
+    const bands = q.get("bands") ?? "1-20,21-100";
+    args.push("--bands", bands);
   }
 
   if (action === "init") {
@@ -218,6 +228,8 @@ export function startServer(options: ServerOptions = {}) {
           stats: stats(db),
           rejects: rejectSummary(db, 5),
           fields: FIELDS,
+          boards: listBoards(db).length,
+          discovery: { configured: searchConfigured() },
           markets: readdirSync(templatesDir())
             .filter((f) => /^market\..+\.yaml$/.test(f))
             .map((f) => f.slice(7, -5)),
@@ -389,6 +401,41 @@ export function startServer(options: ServerOptions = {}) {
         }
         recordDecision(db, job.id, label, body.note ? String(body.note) : undefined);
         json(res, 200, { ok: true, job: { id: job.id, title: job.title, company: job.company } });
+        return;
+      }
+
+      if (pathname === "/api/discover" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const url = String(body.url ?? "").trim();
+        const name = body.name ? String(body.name).trim() : undefined;
+        if (!/^https?:\/\//i.test(url)) {
+          json(res, 400, { error: "a careers page URL is required" });
+          return;
+        }
+        try {
+          const found = await detect(url, name);
+          const ident = found.company.slug ?? found.company.uid!;
+          // A URL without --name infers a lower-case label from the slug. Never
+          // let that replace the name a board already has.
+          const existing = listBoards(db, false).find(
+            (b) => b.ats === found.company.source && b.ident === ident,
+          );
+          upsertBoards(db, [
+            {
+              ats: found.company.source,
+              ident,
+              token: found.company.token,
+              name: existing?.name ?? found.company.name,
+            },
+          ]);
+          json(res, 200, {
+            company: { name: found.company.name, source: found.company.source },
+            boards: listBoards(db).length,
+            note: found.note ?? null,
+          });
+        } catch (err) {
+          json(res, 400, { error: (err as Error).message });
+        }
         return;
       }
 
