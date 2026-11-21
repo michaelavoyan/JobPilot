@@ -56,7 +56,36 @@ test("an interval that includes 0.5 is reported as such, not hidden", () => {
   assert.ok(ci.low <= 0.5, "overlapping groups must produce a wide interval");
 });
 
+/** Ten applied above ten skipped: the clearest possible separation. */
+function separablePairs(): Parameters<typeof shadowStats>[0] {
+  return [
+    ...Array.from({ length: 10 }, (_, i) => ({
+      jobId: `p${i}`,
+      learned: 80 + i,
+      baseline: 70 + i,
+      label: "applied",
+    })),
+    ...Array.from({ length: 10 }, (_, i) => ({
+      jobId: `n${i}`,
+      learned: 40 + i,
+      baseline: 40 + i,
+      label: "skipped",
+    })),
+  ];
+}
+
 test("shadowStats summarises paired scores", () => {
+  const stats = shadowStats(separablePairs());
+  assert.equal(stats.n, 20);
+  assert.equal(stats.labelled, 20);
+  assert.equal(stats.meanDelta, 5, "learned scores sit five points higher");
+  assert.equal(stats.comparison?.aucLearned, 1, "applied outranks skipped");
+  assert.equal(stats.comparison?.aucBaseline, 1);
+  assert.equal(stats.needed, 20);
+  assert.equal(stats.solidAt, 50, "twenty pairs are a direction, not a verdict");
+});
+
+test("a handful of pairs yields no interval at all", () => {
   const stats = shadowStats([
     { jobId: "a", learned: 82, baseline: 70, label: "applied" },
     { jobId: "b", learned: 60, baseline: 62, label: "skipped" },
@@ -65,21 +94,21 @@ test("shadowStats summarises paired scores", () => {
   assert.equal(stats.n, 3);
   assert.equal(stats.labelled, 2);
   assert.equal(stats.meanDelta, 3.3, "(12 - 2 + 0) / 3");
-  assert.equal(stats.aucLearned, 1, "the applied posting outranks the skipped one");
-  assert.equal(stats.aucBaseline, 1);
+  assert.equal(stats.needed, 20);
+  assert.equal(stats.comparison, undefined, "the bootstrap would collapse to 1.00–1.00");
 });
 
 test("shadowStats reports nothing for an empty set", () => {
   const stats = shadowStats([]);
   assert.equal(stats.n, 0);
-  assert.equal(stats.aucLearned, undefined);
+  assert.equal(stats.comparison, undefined);
 });
 
-test("unlabelled pairs contribute to counts but not to AUC", () => {
+test("unlabelled pairs contribute to counts but not to a comparison", () => {
   const stats = shadowStats([{ jobId: "a", learned: 80, baseline: 70 }]);
   assert.equal(stats.n, 1);
   assert.equal(stats.labelled, 0);
-  assert.equal(stats.aucLearned, undefined, "no labels, no conclusion");
+  assert.equal(stats.comparison, undefined, "no labels, no conclusion");
 });
 
 function job(id: string): Job {
@@ -98,29 +127,28 @@ function job(id: string): Job {
 }
 
 test("precision compares the best few under each variant", () => {
-  const stats = shadowStats([
-    { jobId: "a", learned: 90, baseline: 60, label: "applied" },
-    { jobId: "b", learned: 80, baseline: 90, label: "skipped" },
-    { jobId: "c", learned: 30, baseline: 80, label: "applied" },
-  ]);
-
-  // k=3: both variants rank all three, so precision is the same 2/3.
-  assert.equal(stats.precision?.k, 3);
-  assert.equal(stats.precision?.learned, 2 / 3);
-  assert.equal(stats.precision?.baseline, 2 / 3);
+  // Learning lifts every applied posting above every skipped one; the baseline
+  // keeps them in the same order, so both reach 1.00 here.
+  const stats = shadowStats(separablePairs());
+  assert.equal(stats.comparison?.precision?.k, 10);
+  assert.equal(stats.comparison?.precision?.learned, 1);
+  assert.equal(stats.comparison?.precision?.baseline, 1);
 });
 
-test("precision is capped at ten and undefined without labels", () => {
-  const pairs = Array.from({ length: 12 }, (_, i) => ({
+test("precision is capped at ten and absent without labels", () => {
+  const unlabelled = shadowStats([{ jobId: "a", learned: 80, baseline: 70 }]);
+  assert.equal(unlabelled.comparison, undefined);
+
+  // 25 labelled pairs: k stays at ten.
+  const pairs = Array.from({ length: 25 }, (_, i) => ({
     jobId: `j${i}`,
     learned: 50 + i,
     baseline: 50 + i,
-    label: i < 6 ? "applied" : "skipped",
+    label: i < 12 ? "applied" : "skipped",
   }));
-  assert.equal(shadowStats(pairs).precision?.k, 10);
-
-  const unlabelled = shadowStats([{ jobId: "a", learned: 80, baseline: 70 }]);
-  assert.equal(unlabelled.precision, undefined);
+  const stats = shadowStats(pairs);
+  assert.equal(stats.labelled, 25);
+  assert.equal(stats.comparison?.precision?.k, 10);
 });
 
 test("shadow scores round-trip and pair with the learned score", () => {

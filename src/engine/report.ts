@@ -129,6 +129,15 @@ export function bootstrapAuc(
   };
 }
 
+/**
+ * Below this many labelled pairs a bootstrap interval collapses to the point
+ * estimate and reads as certainty. The plan says nothing is concluded from a
+ * sample this small, so no interval is printed at all.
+ */
+export const MIN_COMPARISON = 20;
+/** From here a comparison is a real comparison rather than a direction. */
+export const SOLID_COMPARISON = 50;
+
 export interface ShadowPair {
   jobId: string;
   learned: number;
@@ -142,14 +151,31 @@ export function shadowStats(pairs: ShadowPair[]): {
   labelled: number;
   meanDelta: number;
   agreement: number;
-  aucLearned?: number;
-  aucBaseline?: number;
-  aucCi?: { low: number; high: number };
-  /** Of the best few labelled postings under each variant, how many were applied to. */
-  precision?: { k: number; learned: number; baseline: number };
+  /** Pairs needed before any comparison is reported. */
+  needed: number;
+  /** Pairs from which the comparison is more than a direction. */
+  solidAt: number;
+  /**
+   * Only present when the labelled sample can support it. Absent is the honest
+   * answer for a handful of decisions, not a zero and not an interval.
+   */
+  comparison?: {
+    aucLearned?: number;
+    aucBaseline?: number;
+    aucCi?: { low: number; high: number };
+    /** Of the best few labelled postings under each variant, how many were applied to. */
+    precision?: { k: number; learned: number; baseline: number };
+  };
 } {
   if (!pairs.length) {
-    return { n: 0, labelled: 0, meanDelta: 0, agreement: 0 };
+    return {
+      n: 0,
+      labelled: 0,
+      meanDelta: 0,
+      agreement: 0,
+      needed: MIN_COMPARISON,
+      solidAt: SOLID_COMPARISON,
+    };
   }
 
   const delta = pairs.reduce((sum, p) => sum + (p.learned - p.baseline), 0) / pairs.length;
@@ -172,15 +198,22 @@ export function shadowStats(pairs: ShadowPair[]): {
       ? [...labelled].sort((a, b) => b[key] - a[key]).slice(0, k).filter(positive).length / k
       : 0;
 
+  const comparable = labelled.length >= MIN_COMPARISON;
   return {
     n: pairs.length,
     labelled: labelled.length,
     meanDelta: Math.round(delta * 10) / 10,
     agreement: Math.round(agreement * 100) / 100,
-    aucLearned: auc(learnedPos, learnedNeg),
-    aucBaseline: auc(basePos, baseNeg),
-    aucCi: bootstrapAuc(learnedPos, learnedNeg),
-    precision: k ? { k, learned: at("learned"), baseline: at("baseline") } : undefined,
+    needed: MIN_COMPARISON,
+    solidAt: SOLID_COMPARISON,
+    comparison: comparable
+      ? {
+          aucLearned: auc(learnedPos, learnedNeg),
+          aucBaseline: auc(basePos, baseNeg),
+          aucCi: bootstrapAuc(learnedPos, learnedNeg),
+          precision: k ? { k, learned: at("learned"), baseline: at("baseline") } : undefined,
+        }
+      : undefined,
   };
 }
 
@@ -274,22 +307,33 @@ export function runEval(db: Db, tracks: Track[]): void {
     log("\nlearning compared with baseline (same postings, scored twice):");
     log(`  ${stats.n} posting(s), ${stats.labelled} labelled`);
     log(`  mean change ${stats.meanDelta > 0 ? "+" : ""}${stats.meanDelta} points · ${Math.round(stats.agreement * 100)}% agree within 5`);
-    if (stats.precision) {
+    if (!stats.comparison) {
       log(
-        `  of the top ${stats.precision.k} labelled: ${Math.round(stats.precision.learned * 100)}% applied ` +
-          `with learning, ${Math.round(stats.precision.baseline * 100)}% without`,
+        `  ${stats.labelled} labelled pair(s) — below the ${stats.needed} needed to compare; ` +
+          `no interval is reported from a sample this small`,
       );
-    }
-    if (stats.aucLearned !== undefined && stats.aucBaseline !== undefined && stats.aucCi) {
-      log(
-        `  AUC learned ${stats.aucLearned.toFixed(2)} (95% CI ${stats.aucCi.low.toFixed(2)}–${stats.aucCi.high.toFixed(2)}) ` +
-          `· baseline ${stats.aucBaseline.toFixed(2)}`,
-      );
-      if (stats.aucCi.low <= 0.5) {
-        log("  the interval includes 0.5 — this is not evidence of an improvement yet");
-      }
     } else {
-      log("  not enough labelled pairs to compare yet (need both applied and skipped)");
+      const c = stats.comparison;
+      if (c.precision) {
+        log(
+          `  of the top ${c.precision.k} labelled: ${Math.round(c.precision.learned * 100)}% applied ` +
+            `with learning, ${Math.round(c.precision.baseline * 100)}% without`,
+        );
+      }
+      if (stats.labelled < stats.solidAt) {
+        log(`  direction only: ${stats.labelled} of the ${stats.solidAt} pairs a firm comparison needs`);
+      }
+      if (c.aucLearned !== undefined && c.aucBaseline !== undefined && c.aucCi) {
+        log(
+          `  AUC learned ${c.aucLearned.toFixed(2)} (95% CI ${c.aucCi.low.toFixed(2)}–${c.aucCi.high.toFixed(2)}) ` +
+            `· baseline ${c.aucBaseline.toFixed(2)}`,
+        );
+        if (c.aucCi.low <= 0.5) {
+          log("  the interval includes 0.5 — this is not evidence of an improvement yet");
+        }
+      } else {
+        log("  not enough labelled pairs to compare yet (need both applied and skipped)");
+      }
     }
   } else {
     log("\nno shadow scoring yet. Set LEARNING_SHADOW=10 in .env to measure learning.");
