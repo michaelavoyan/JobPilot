@@ -372,14 +372,21 @@ async function addCompany() {
   if (!url) return;
   $("addCompany").disabled = true;
   note("companiesNote", "Checking that board…");
-  const res = await fetch("/api/discover", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url }),
-  });
-  const data = await res.json().catch(() => ({}));
-  $("addCompany").disabled = false;
-  if (!res.ok) {
+  let res;
+  let data = {};
+  try {
+    res = await fetch("/api/discover", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    data = await res.json().catch(() => ({}));
+  } catch {
+    res = null;
+  } finally {
+    $("addCompany").disabled = false;
+  }
+  if (!res || !res.ok) {
     note("companiesNote", data.error ?? "could not add that URL", "bad");
     return;
   }
@@ -417,7 +424,20 @@ function currentMin() {
 
 async function loadJobs() {
   const min = currentMin();
-  const { jobs, total } = await (await fetch(`/api/jobs?min=${min}&limit=500`)).json();
+
+  let data;
+  try {
+    const res = await fetch(`/api/jobs?min=${min}&limit=500`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch {
+    // A dead server must not look like "no matches": keep the list on screen
+    // and say what actually happened.
+    $("resultsHint").textContent = "Could not reach the server. Is it still running?";
+    return;
+  }
+
+  const { jobs, total } = data;
   const list = $("jobs");
   list.textContent = "";
 
@@ -477,13 +497,46 @@ function renderJob(job) {
   return card;
 }
 
+/** A POST that reports failure instead of throwing an unhandled rejection. */
+async function postAction(url, body) {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** A short message that needs no reply. */
+function notice(text) {
+  const existing = document.querySelector(".toast.notice-only");
+  if (existing) existing.remove();
+  const bar = el("div", "toast notice-only");
+  bar.appendChild(el("span", "", text));
+  document.body.appendChild(bar);
+  setTimeout(() => bar.remove(), 5000);
+}
+
 async function feedback(job, label, card) {
-  const res = await fetch("/api/feedback", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jobId: job.id, label }),
-  });
-  if (!res.ok) return;
+  let res;
+  try {
+    res = await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jobId: job.id, label }),
+    });
+  } catch {
+    notice("Could not save that decision. Check the server and try again.");
+    return;
+  }
+  if (!res.ok) {
+    notice("Could not save that decision. Check the server and try again.");
+    return;
+  }
 
   card.style.opacity = "0.35";
   setTimeout(() => card.remove(), 220);
@@ -509,11 +562,11 @@ function offerUndo(job, label) {
   const undo = el("button", "", "Undo");
   undo.addEventListener("click", async () => {
     bar.remove();
-    await fetch("/api/undo", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jobId: job.id }),
-    });
+    const ok = await postAction("/api/undo", { jobId: job.id });
+    if (!ok) {
+      notice("Could not undo that. The decision is still saved.");
+      return;
+    }
     loadState();
     loadJobs();
     loadHidden();
@@ -667,11 +720,11 @@ async function loadLearning() {
   box.textContent = "";
 
   const save = async (id, status) => {
-    await fetch("/api/learning/constraint", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    });
+    const ok = await postAction("/api/learning/constraint", { id, status });
+    if (!ok) {
+      notice("Could not save that change. Try again.");
+      return;
+    }
     loadLearning();
   };
 
@@ -729,11 +782,11 @@ async function loadHidden() {
 
       const restore = el("button", "ghost", "Restore");
       restore.addEventListener("click", async () => {
-        await fetch("/api/undo", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ jobId: entry.jobId }),
-        });
+        const ok = await postAction("/api/undo", { jobId: entry.jobId });
+        if (!ok) {
+          notice("Could not restore that posting. Try again.");
+          return;
+        }
         loadHidden();
         loadJobs();
         loadState();

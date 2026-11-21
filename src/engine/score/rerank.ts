@@ -1,5 +1,6 @@
 import type { Job, Score } from "../types.ts";
 import { loadMarket } from "../config.ts";
+import { renderLearning } from "../learn.ts";
 import type { LearningProfile } from "../learn.ts";
 import type { Profile, Track } from "../config.ts";
 import { chat, estimateCost } from "./llm.ts";
@@ -24,6 +25,12 @@ export interface ScoreOutcome {
   allowanceUsd: number;
   model: string;
   failed: { job: Job; reason: string }[];
+  /**
+   * Jobs whose prompt actually contained learned evidence. A batch of a track
+   * with no examples and no preference or constraint gets an unchanged prompt,
+   * so its score is baseline, not learned.
+   */
+  learnedJobIds: Set<string>;
 }
 
 interface RawScore {
@@ -138,6 +145,7 @@ export async function scoreJobs(
     allowanceUsd: 0,
     model: "",
     failed: [],
+    learnedJobIds: new Set<string>(),
   };
   if (!requests.length) return outcome;
 
@@ -153,7 +161,14 @@ export async function scoreJobs(
   const processBatch = async (batch: ScoreRequest[]): Promise<void> => {
     if (!batch.length) return;
 
-    const user = buildUser(profile, briefs, batch, options.learning);
+    // Learning is per track: a batch of a track with nothing learned about it
+    // must not be marked as produced with learning.
+    const batchTracks = [...new Set(batch.flatMap((r) => r.tracks))];
+    const learningForBatch =
+      options.learning && renderLearning(options.learning, batchTracks) !== ""
+        ? options.learning
+        : undefined;
+    const user = buildUser(profile, briefs, batch, learningForBatch);
     let parsed: ParsedBatch | null = null;
     let issue = "unknown";
     let truncated = false;
@@ -211,6 +226,9 @@ export async function scoreJobs(
     }
 
     outcome.scores.push(...parsed.scores);
+    if (learningForBatch) {
+      for (const req of batch) outcome.learnedJobIds.add(req.job.id);
+    }
     for (const i of parsed.missing) {
       outcome.failed.push({ job: batch[i].job, reason: `scoring_incomplete:${issue}` });
     }

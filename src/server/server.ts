@@ -159,13 +159,22 @@ async function readRawBody(req: IncomingMessage, limit: number): Promise<Buffer>
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > limit) throw new Error("body too large");
+    if (size > limit) {
+      throw Object.assign(new Error("body too large"), { status: 413 });
+    }
     chunks.push(chunk as Buffer);
   }
   return Buffer.concat(chunks);
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  // A cross-site form can send `text/plain` without a preflight. Requiring JSON
+  // means the browser has to ask permission first, and this server never grants
+  // it. The same check keeps the API honest for anything else that calls it.
+  const type = String(req.headers["content-type"] ?? "").toLowerCase();
+  if (!type.startsWith("application/json")) {
+    throw Object.assign(new Error("send application/json"), { status: 415 });
+  }
   const raw = await readRawBody(req, 1_000_000);
   if (!raw.length) return {};
   return JSON.parse(raw.toString("utf8")) as Record<string, unknown>;
@@ -181,6 +190,29 @@ export function startServer(options: ServerOptions = {}) {
   const cfgDir = options.cfgDir;
   const db: Db = open();
 
+  /**
+   * The page is served from this host. Anything else is another site in the
+   * same browser, and it must not be able to start paid runs, rewrite the
+   * profile or label postings on the user's behalf.
+   *
+   * The host is checked as well as the origin: a DNS name that resolves to
+   * 127.0.0.1 would otherwise be able to present itself as same-origin.
+   */
+  function isSameOrigin(req: IncomingMessage): boolean {
+    const host = String(req.headers.host ?? "");
+    const hostname = host.split(":")[0];
+    if (hostname !== "127.0.0.1" && hostname !== "localhost") return false;
+
+    const site = req.headers["sec-fetch-site"];
+    if (typeof site === "string" && site !== "same-origin" && site !== "none") return false;
+
+    const origin = req.headers.origin;
+    if (typeof origin === "string" && origin && origin !== `http://${host}`) return false;
+
+    // No headers at all means curl or a script, not a browser page.
+    return true;
+  }
+
   let running: ReturnType<typeof spawn> | null = null;
 
   const server = createServer(async (req, res) => {
@@ -188,6 +220,11 @@ export function startServer(options: ServerOptions = {}) {
     const { pathname } = url;
 
     try {
+      if (!isSameOrigin(req)) {
+        json(res, 403, { error: "cross-origin request refused" });
+        return;
+      }
+
       if (await serveStatic(pathname, res)) return;
 
       if (pathname === "/api/state" && req.method === "GET") {
@@ -665,7 +702,8 @@ export function startServer(options: ServerOptions = {}) {
 
       json(res, 404, { error: "not found" });
     } catch (err) {
-      if (!res.headersSent) json(res, 500, { error: (err as Error).message });
+      const status = (err as { status?: number }).status ?? 500;
+      if (!res.headersSent) json(res, status, { error: (err as Error).message });
       else res.end();
     }
   });
