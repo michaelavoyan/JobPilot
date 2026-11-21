@@ -37,6 +37,18 @@ CREATE TABLE IF NOT EXISTS scores (
   model        TEXT NOT NULL,
   profile_hash TEXT NOT NULL,
   scored_at    TEXT NOT NULL,
+  variant      TEXT NOT NULL DEFAULT 'baseline',
+  learning_at  TEXT,
+  PRIMARY KEY (job_id, track)
+);
+
+-- The same posting scored without learning, so the two can be compared.
+CREATE TABLE IF NOT EXISTS shadow_scores (
+  job_id TEXT NOT NULL,
+  track  TEXT NOT NULL,
+  score  INTEGER NOT NULL,
+  model  TEXT NOT NULL,
+  at     TEXT NOT NULL,
   PRIMARY KEY (job_id, track)
 );
 
@@ -108,6 +120,13 @@ function migrate(db: Db): void {
   const decisionColumns = db.prepare("PRAGMA table_info(decisions)").all() as Row[];
   if (!decisionColumns.some((c) => String(c.name) === "updated_at")) {
     db.exec("ALTER TABLE decisions ADD COLUMN updated_at TEXT");
+  }
+  const scoreColumns = db.prepare("PRAGMA table_info(scores)").all() as Row[];
+  if (!scoreColumns.some((c) => String(c.name) === "variant")) {
+    db.exec("ALTER TABLE scores ADD COLUMN variant TEXT NOT NULL DEFAULT 'baseline'");
+  }
+  if (!scoreColumns.some((c) => String(c.name) === "learning_at")) {
+    db.exec("ALTER TABLE scores ADD COLUMN learning_at TEXT");
   }
 }
 
@@ -369,10 +388,12 @@ export function saveScores(
   scores: Score[],
   model: string,
   pHash: string,
+  provenance: { variant: "baseline" | "learned"; learningAt?: string } = { variant: "baseline" },
 ): void {  if (!scores.length) return;
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO scores (job_id, track, score, reasons, flags, model, profile_hash, scored_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO scores
+      (job_id, track, score, reasons, flags, model, profile_hash, scored_at, variant, learning_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const at = nowIso();
   db.exec("BEGIN");
@@ -387,6 +408,8 @@ export function saveScores(
         model,
         pHash,
         at,
+        provenance.variant,
+        provenance.learningAt ?? null,
       );
     }
     db.exec("COMMIT");
@@ -425,6 +448,46 @@ export function countScored(db: Db, minScore: number): number {
     )
     .get(minScore) as Row;
   return Number(row.n);
+}
+
+export function saveShadowScores(
+  db: Db,
+  scores: Score[],
+  model: string,
+): void {
+  if (!scores.length) return;
+  const stmt = db.prepare(
+    "INSERT OR REPLACE INTO shadow_scores (job_id, track, score, model, at) VALUES (?, ?, ?, ?, ?)",
+  );
+  const at = nowIso();
+  db.exec("BEGIN");
+  try {
+    for (const s of scores) stmt.run(s.jobId, s.track, s.score, model, at);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+/** Every posting scored both ways, for the learning comparison. */
+export function shadowPairs(
+  db: Db,
+): { jobId: string; track: string; learned: number; baseline: number }[] {
+  return (
+    db
+      .prepare(
+        `SELECT s.job_id AS jobId, s.track AS track, s.score AS learned, b.score AS baseline
+         FROM scores s
+         JOIN shadow_scores b ON b.job_id = s.job_id AND b.track = s.track`,
+      )
+      .all() as Row[]
+  ).map((r) => ({
+    jobId: String(r.jobId),
+    track: String(r.track),
+    learned: Number(r.learned),
+    baseline: Number(r.baseline),
+  }));
 }
 
 export function topScored(db: Db, minScore: number, limit: number): ScoredJob[] {  const rows = db

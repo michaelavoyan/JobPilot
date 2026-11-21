@@ -354,6 +354,13 @@ async function main(): Promise<void> {
 
     case "learn": {
       const db = open();
+
+      if (args.includes("--reset")) {
+        const removed = db.prepare("DELETE FROM shadow_scores").run();
+        log(`forgot ${removed.changes} shadow score(s); your labels are untouched`);
+        return;
+      }
+
       const learning = buildLearning(db);
       if (!learning.applied && !learning.skipped) {
         log("no labels yet. Label a few postings: npm run feedback -- <id> applied");

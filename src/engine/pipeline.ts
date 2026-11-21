@@ -6,6 +6,7 @@ import {
   markEvaluated,
   recordRejects,
   saveScores,
+  saveShadowScores,
   startRun,
   stats,
   topScored,
@@ -22,7 +23,7 @@ import { provider } from "./score/llm.ts";
 import { buildLearning } from "./learn.ts";
 import { renderDigest, writeDigest } from "./deliver/digest.ts";
 import { pushTelegram } from "./deliver/telegram.ts";
-import { numEnv, log, warn } from "./util.ts";
+import { numEnv, log, nowIso, warn } from "./util.ts";
 import type { SourceError } from "./types.ts";
 
 export interface CollectSummary {
@@ -157,18 +158,42 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
   }
 
   const learning = buildLearning(db);
-  if (learning.appliedExamples.length) {
+  const usingLearning = learning.appliedExamples.length > 0;
+  if (usingLearning) {
     log(`learning from ${learning.applied} applied and ${learning.skipped} skipped postings`);
   }
 
   const outcome = await scoreJobs(requests, tracks, profile, {
     batchSize: numEnv("BATCH_SIZE", 6),
     concurrency: numEnv("LLM_CONCURRENCY", 2),
-    learning,
+    learning: usingLearning ? learning : undefined,
   });
 
+  // A bounded shadow pass: the same postings scored without learning, so the
+  // comparison in `eval` has something to compare against. Off unless enabled,
+  // because it doubles the cost of the postings it touches.
+  const shadowCount = usingLearning ? numEnv("LEARNING_SHADOW", 0) : 0;
+  if (shadowCount > 0 && outcome.scores.length) {
+    const shadowRequests = requests
+      .filter((r) => outcome.scores.some((s) => s.jobId === r.job.id))
+      .slice(0, shadowCount);
+    if (shadowRequests.length) {
+      const baseline = await scoreJobs(shadowRequests, tracks, profile, {
+        batchSize: numEnv("BATCH_SIZE", 6),
+        concurrency: 1,
+      });
+      if (baseline.scores.length) {
+        saveShadowScores(db, baseline.scores, baseline.model);
+        log(`shadow-scored ${baseline.scores.length} posting(s) without learning`);
+      }
+    }
+  }
+
   if (outcome.scores.length) {
-    saveScores(db, outcome.scores, outcome.model, pHash);
+    saveScores(db, outcome.scores, outcome.model, pHash, {
+      variant: usingLearning ? "learned" : "baseline",
+      learningAt: usingLearning ? nowIso() : undefined,
+    });
   }
   summary.scored = new Set(outcome.scores.map((s) => s.jobId)).size;
   summary.failed = outcome.failed.length;
