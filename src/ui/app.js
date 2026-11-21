@@ -629,23 +629,34 @@ async function loadLearning() {
   if (data.shadow) {
     const s2 = data.shadow;
     const parts = [];
-    if (s2.precision) {
+    const c = s2.comparison;
+    if (!c) {
       parts.push(
-        `Of your top ${s2.precision.k} labelled postings, ${percent(s2.precision.learned)} were ones you applied to` +
-          ` (${percent(s2.precision.baseline)} without learning).`,
+        `Scored both ways on ${s2.labelled} labelled posting${s2.labelled === 1 ? "" : "s"}; ` +
+          `needs ${s2.needed} before the two can be compared.`,
       );
-    }
-    if (s2.aucLearned !== null) {
-      parts.push(
-        `Applied jobs outrank skipped ones ${percent(s2.aucLearned)} of the time` +
-          (s2.interval ? ` (95% range ${percent(s2.interval.low)}–${percent(s2.interval.high)})` : "") +
-          (s2.aucBaseline !== null ? `, without learning ${percent(s2.aucBaseline)}` : ""),
-      );
-      if (s2.interval && s2.interval.low <= 0.5) {
-        parts.push("too early to call that an improvement.");
-      }
     } else {
-      parts.push("Scored both ways, but not enough labelled pairs to compare yet.");
+      if (c.precision) {
+        parts.push(
+          `Of your top ${c.precision.k} labelled postings, ${percent(c.precision.learned)} were ones you applied to` +
+            ` (${percent(c.precision.baseline)} without learning).`,
+        );
+      }
+      if (s2.labelled < s2.solidAt) {
+        parts.push(`direction only: ${s2.labelled} of the ${s2.solidAt} pairs a firm comparison needs.`);
+      }
+      if (c.aucLearned !== null) {
+        parts.push(
+          `Applied jobs outrank skipped ones ${percent(c.aucLearned)} of the time` +
+            (c.interval ? ` (95% range ${percent(c.interval.low)}–${percent(c.interval.high)})` : "") +
+            (c.aucBaseline !== null ? `, without learning ${percent(c.aucBaseline)}` : ""),
+        );
+        if (c.interval && c.interval.low <= 0.5) {
+          parts.push("too early to call that an improvement.");
+        }
+      } else {
+        parts.push("Scored both ways, but not enough labelled pairs to compare yet.");
+      }
     }
     $("learningComparison").textContent = parts.join(" — ");
   } else {

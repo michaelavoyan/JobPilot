@@ -509,10 +509,18 @@ export function startServer(options: ServerOptions = {}) {
                 labelled: compared.labelled,
                 meanDelta: compared.meanDelta,
                 agreement: compared.agreement,
-                aucLearned: compared.aucLearned ?? null,
-                aucBaseline: compared.aucBaseline ?? null,
-                interval: compared.aucCi ?? null,
-                precision: compared.precision ?? null,
+                needed: compared.needed,
+                solidAt: compared.solidAt,
+                // Absent until the sample can support it; the page says so
+                // rather than drawing a conclusion from four decisions.
+                comparison: compared.comparison
+                  ? {
+                      aucLearned: compared.comparison.aucLearned ?? null,
+                      aucBaseline: compared.comparison.aucBaseline ?? null,
+                      interval: compared.comparison.aucCi ?? null,
+                      precision: compared.comparison.precision ?? null,
+                    }
+                  : null,
               }
             : null,
         });
