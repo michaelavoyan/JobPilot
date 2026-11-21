@@ -1,5 +1,6 @@
 import type { Job, Score } from "../types.ts";
 import { loadMarket } from "../config.ts";
+import type { LearningProfile } from "../learn.ts";
 import type { Profile, Track } from "../config.ts";
 import { chat, estimateCost } from "./llm.ts";
 import { buildSystem, buildUser } from "./prompt.ts";
@@ -119,6 +120,8 @@ export interface ScoreOptions {
   concurrency: number;
   /** Injected by tests so the wiring can be exercised without a provider. */
   chatFn?: typeof chat;
+  /** Calibration derived from the user's own decisions, when there is enough. */
+  learning?: LearningProfile;
 }
 
 export async function scoreJobs(
@@ -150,7 +153,7 @@ export async function scoreJobs(
   const processBatch = async (batch: ScoreRequest[]): Promise<void> => {
     if (!batch.length) return;
 
-    const user = buildUser(profile, briefs, batch);
+    const user = buildUser(profile, briefs, batch, options.learning);
     let parsed: ParsedBatch | null = null;
     let issue = "unknown";
     let truncated = false;

@@ -19,6 +19,7 @@ import { hardFilter } from "./filter/rules.ts";
 import { scoreJobs } from "./score/rerank.ts";
 import type { ScoreRequest } from "./score/rerank.ts";
 import { provider } from "./score/llm.ts";
+import { buildLearning } from "./learn.ts";
 import { renderDigest, writeDigest } from "./deliver/digest.ts";
 import { pushTelegram } from "./deliver/telegram.ts";
 import { numEnv, log, warn } from "./util.ts";
@@ -155,9 +156,15 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
     return summary;
   }
 
+  const learning = buildLearning(db);
+  if (learning.appliedExamples.length) {
+    log(`learning from ${learning.applied} applied and ${learning.skipped} skipped postings`);
+  }
+
   const outcome = await scoreJobs(requests, tracks, profile, {
     batchSize: numEnv("BATCH_SIZE", 6),
     concurrency: numEnv("LLM_CONCURRENCY", 2),
+    learning,
   });
 
   if (outcome.scores.length) {

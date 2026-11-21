@@ -71,6 +71,9 @@ That is the whole setup.
 
 Changed your mind? Press **Undo**, or open **hidden** below the list and bring any job back.
 
+Your decisions also calibrate the scorer: once there are enough of them, it is
+shown where your bar actually sits, and `npm run learn` suggests a minimum score.
+
 ---
 
 ## Private by default
