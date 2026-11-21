@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS scores (
   scored_at    TEXT NOT NULL,
   variant      TEXT NOT NULL DEFAULT 'baseline',
   learning_at  TEXT,
+  learning_version TEXT,
   PRIMARY KEY (job_id, track)
 );
 
@@ -60,8 +61,20 @@ CREATE TABLE IF NOT EXISTS shadow_scores (
   track  TEXT NOT NULL,
   score  INTEGER NOT NULL,
   model  TEXT NOT NULL,
+  version TEXT,
   at     TEXT NOT NULL,
   PRIMARY KEY (job_id, track)
+);
+
+-- Every derivation that influenced a score. Kept so a past score can be
+-- explained, and so a rules change invalidates old comparisons instead of
+-- silently mixing them.
+CREATE TABLE IF NOT EXISTS learning_runs (
+  id      TEXT PRIMARY KEY,
+  at      TEXT NOT NULL,
+  labels  INTEGER NOT NULL,
+  version TEXT NOT NULL,
+  payload TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS rejects (
@@ -139,6 +152,13 @@ function migrate(db: Db): void {
   }
   if (!scoreColumns.some((c) => String(c.name) === "learning_at")) {
     db.exec("ALTER TABLE scores ADD COLUMN learning_at TEXT");
+  }
+  if (!scoreColumns.some((c) => String(c.name) === "learning_version")) {
+    db.exec("ALTER TABLE scores ADD COLUMN learning_version TEXT");
+  }
+  const shadowColumns = db.prepare("PRAGMA table_info(shadow_scores)").all() as Row[];
+  if (!shadowColumns.some((c) => String(c.name) === "version")) {
+    db.exec("ALTER TABLE shadow_scores ADD COLUMN version TEXT");
   }
 }
 
@@ -400,12 +420,17 @@ export function saveScores(
   scores: Score[],
   model: string,
   pHash: string,
-  provenance: { variant: "baseline" | "learned"; learningAt?: string } = { variant: "baseline" },
+  provenance: {
+    variant: "baseline" | "learned";
+    learningAt?: string;
+    version?: string;
+  } = { variant: "baseline" },
 ): void {  if (!scores.length) return;
   const stmt = db.prepare(`
     INSERT OR REPLACE INTO scores
-      (job_id, track, score, reasons, flags, model, profile_hash, scored_at, variant, learning_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (job_id, track, score, reasons, flags, model, profile_hash, scored_at,
+       variant, learning_at, learning_version)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const at = nowIso();
   db.exec("BEGIN");
@@ -422,6 +447,7 @@ export function saveScores(
         at,
         provenance.variant,
         provenance.learningAt ?? null,
+        provenance.version ?? null,
       );
     }
     db.exec("COMMIT");
@@ -466,15 +492,16 @@ export function saveShadowScores(
   db: Db,
   scores: Score[],
   model: string,
+  version?: string,
 ): void {
   if (!scores.length) return;
   const stmt = db.prepare(
-    "INSERT OR REPLACE INTO shadow_scores (job_id, track, score, model, at) VALUES (?, ?, ?, ?, ?)",
+    "INSERT OR REPLACE INTO shadow_scores (job_id, track, score, model, version, at) VALUES (?, ?, ?, ?, ?, ?)",
   );
   const at = nowIso();
   db.exec("BEGIN");
   try {
-    for (const s of scores) stmt.run(s.jobId, s.track, s.score, model, at);
+    for (const s of scores) stmt.run(s.jobId, s.track, s.score, model, version ?? null, at);
     db.exec("COMMIT");
   } catch (err) {
     db.exec("ROLLBACK");
@@ -549,23 +576,76 @@ export function setConstraintStatus(db: Db, id: string, status: Constraint["stat
   return Number(res.changes) > 0;
 }
 
-/** Every posting scored both ways, for the learning comparison. */
+/**
+ * Postings scored both ways **under the given rules**. Pairs from another rule
+ * set are a different measurement and are deliberately excluded.
+ */
 export function shadowPairs(
   db: Db,
+  version: string,
 ): { jobId: string; track: string; learned: number; baseline: number }[] {
   return (
     db
       .prepare(
         `SELECT s.job_id AS jobId, s.track AS track, s.score AS learned, b.score AS baseline
          FROM scores s
-         JOIN shadow_scores b ON b.job_id = s.job_id AND b.track = s.track`,
+         JOIN shadow_scores b ON b.job_id = s.job_id AND b.track = s.track
+         WHERE s.learning_version = ? AND b.version = ?`,
       )
-      .all() as Row[]
+      .all(version, version) as Row[]
   ).map((r) => ({
     jobId: String(r.jobId),
     track: String(r.track),
     learned: Number(r.learned),
     baseline: Number(r.baseline),
+  }));
+}
+
+/**
+ * Pairs that exist but were produced under different learning rules. They are
+ * not comparable, so they are counted rather than compared.
+ */
+export function staleShadowPairs(db: Db, version: string): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n
+       FROM scores s
+       JOIN shadow_scores b ON b.job_id = s.job_id AND b.track = s.track
+       WHERE s.learning_version IS NOT ? OR b.version IS NOT ?`,
+    )
+    .get(version, version) as Row;
+  return Number(row.n ?? 0);
+}
+
+export interface LearningRun {
+  id: string;
+  at: string;
+  labels: number;
+  version: string;
+  payload: string;
+}
+
+export function recordLearningRun(
+  db: Db,
+  run: { labels: number; version: string; payload: string },
+): void {
+  const at = nowIso();
+  db.prepare(
+    "INSERT INTO learning_runs (id, at, labels, version, payload) VALUES (?, ?, ?, ?, ?)",
+  ).run(randomUUID(), at, run.labels, run.version, run.payload);
+}
+
+export function learningRuns(db: Db, limit = 20): LearningRun[] {
+  return (
+    db
+      .prepare("SELECT * FROM learning_runs ORDER BY at DESC LIMIT ?")
+      .all(limit) as Row[]
+  ).map((r) => ({
+    id: String(r.id),
+    at: String(r.at),
+    labels: Number(r.labels),
+    version: String(r.version),
+    payload: String(r.payload),
   }));
 }
 

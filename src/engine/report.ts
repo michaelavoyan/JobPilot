@@ -5,9 +5,11 @@ import {
   rejectSummary,
   scoreDistribution,
   shadowPairs,
+  staleShadowPairs,
   stats,
 } from "../storage/db.ts";
 import type { Track } from "./config.ts";
+import { LEARNING_VERSION } from "./learn.ts";
 import { log } from "./util.ts";
 
 type Row = Record<string, unknown>;
@@ -262,7 +264,7 @@ export function runEval(db: Db, tracks: Track[]): void {
     }
   }
 
-  const pairs = shadowPairs(db).map((p) => ({
+  const pairs = shadowPairs(db, LEARNING_VERSION).map((p) => ({
     ...p,
     label: labels.find((l) => l.jobId === p.jobId)?.label,
   }));
@@ -290,6 +292,14 @@ export function runEval(db: Db, tracks: Track[]): void {
     }
   } else {
     log("\nno shadow scoring yet. Set LEARNING_SHADOW=10 in .env to measure learning.");
+  }
+
+  const stale = staleShadowPairs(db, LEARNING_VERSION);
+  if (stale) {
+    log(
+      `  ${stale} pair(s) were scored under older learning rules and are not compared; ` +
+        `rescore with LEARNING_SHADOW to refresh them`,
+    );
   }
 
   const rejects = rejectSummary(db);

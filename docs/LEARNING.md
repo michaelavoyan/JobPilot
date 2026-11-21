@@ -5,8 +5,10 @@ that learns from decisions and **proves** it ranks better.
 
 > **Status.** L0–L5 are implemented: measurement, per-track examples,
 > similarity selection, notes turned into confirmed constraints, preference
-> hints, and a page section that shows all of it. L6 — the calibrated comparison
-> that proves anything — needs 50 labels per class and there are zero.
+> hints, and a page section that shows all of it. Rule sets are versioned and
+> every derivation is recorded, so a past score can be explained and pairs from
+> different rules are never compared. L6 — the calibrated comparison that proves
+> anything — needs 50 labels per class and there are zero.
 
 ---
 
@@ -85,7 +87,9 @@ CREATE TABLE learning_runs (
 ```
 
 The `variant` column is the whole measurement story: without it, "did learning
-help?" is unanswerable.
+help?" is unanswerable. `learning_runs` is the other half: it stores the rule
+fingerprint and the exact block that reached the model, so `eval` can refuse to
+compare scores produced under different rules instead of averaging them.
 
 ---
 
@@ -221,8 +225,8 @@ Learning
 - **Reset is one command**, and labels survive it.
 - **Variants are recorded**, so a regression is attributable, not mysterious.
 - **Nothing moves the user's threshold.** Ever.
-- **The learning version is hashed** (`version` column), so a rules change
-  invalidates old comparisons instead of silently mixing them.
+- **The learning version is hashed** from the derivation gates, so a rules
+  change invalidates old comparisons instead of silently mixing them.
 
 ---
 

@@ -1,7 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { auc, bootstrapAuc, shadowStats } from "../src/engine/report.ts";
-import { open, saveScores, saveShadowScores, shadowPairs, upsertJobs } from "../src/storage/db.ts";
+import {
+  learningRuns,
+  open,
+  recordLearningRun,
+  saveScores,
+  saveShadowScores,
+  shadowPairs,
+  staleShadowPairs,
+  upsertJobs,
+} from "../src/storage/db.ts";
 import type { Job } from "../src/engine/types.ts";
 
 test("a clean separation gives an AUC of 1", () => {
@@ -120,15 +129,57 @@ test("shadow scores round-trip and pair with the learned score", () => {
   saveScores(db, [{ jobId: "a", track: "b", score: 82, reasons: [], flags: [] }], "m", "h", {
     variant: "learned",
     learningAt: "2026-01-01T00:00:00.000Z",
+    version: "aaaa1111",
   });
-  saveShadowScores(db, [{ jobId: "a", track: "b", score: 70, reasons: [], flags: [] }], "m");
+  saveShadowScores(db, [{ jobId: "a", track: "b", score: 70, reasons: [], flags: [] }], "m", "aaaa1111");
 
-  assert.deepEqual(shadowPairs(db), [{ jobId: "a", track: "b", learned: 82, baseline: 70 }]);
+  assert.deepEqual(shadowPairs(db, "aaaa1111"), [
+    { jobId: "a", track: "b", learned: 82, baseline: 70 },
+  ]);
 });
 
 test("a posting scored only once way is not a pair", () => {
   const db = open(":memory:");
   upsertJobs(db, [job("a")]);
   saveScores(db, [{ jobId: "a", track: "b", score: 82, reasons: [], flags: [] }], "m", "h");
-  assert.deepEqual(shadowPairs(db), []);
+  assert.deepEqual(shadowPairs(db, "aaaa1111"), []);
+});
+
+test("a pair is only compared when both scores came from the same rules", () => {
+  const db = open(":memory:");
+  upsertJobs(db, [job("a")]);
+  saveScores(db, [{ jobId: "a", track: "b", score: 82, reasons: [], flags: [] }], "m", "h", {
+    variant: "learned",
+    learningAt: "2026-01-01T00:00:00.000Z",
+    version: "aaaa1111",
+  });
+  saveShadowScores(db, [{ jobId: "a", track: "b", score: 70, reasons: [], flags: [] }], "m", "aaaa1111");
+
+  assert.equal(shadowPairs(db, "aaaa1111").length, 1, "same version, comparable");
+  assert.equal(staleShadowPairs(db, "aaaa1111"), 0);
+});
+
+test("scores from an older rule set are counted, not silently compared", () => {
+  const db = open(":memory:");
+  upsertJobs(db, [job("a")]);
+  saveScores(db, [{ jobId: "a", track: "b", score: 82, reasons: [], flags: [] }], "m", "h", {
+    variant: "learned",
+    learningAt: "2026-01-01T00:00:00.000Z",
+    version: "bbbb2222",
+  });
+  saveShadowScores(db, [{ jobId: "a", track: "b", score: 70, reasons: [], flags: [] }], "m", "aaaa1111");
+
+  assert.deepEqual(shadowPairs(db, "bbbb2222"), [], "different rules, no comparison");
+  assert.equal(staleShadowPairs(db, "bbbb2222"), 1, "but the mismatch is reported");
+});
+
+test("a learning run keeps the block that reached the model", () => {
+  const db = open(":memory:");
+  recordLearningRun(db, { labels: 7, version: "abc12345", payload: "They applied to: X" });
+
+  const runs = learningRuns(db);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].labels, 7);
+  assert.equal(runs[0].version, "abc12345");
+  assert.match(runs[0].payload, /They applied to/);
 });
