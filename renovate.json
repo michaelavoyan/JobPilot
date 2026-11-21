@@ -1,6 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
+  "packageRules": [
+    {
+      "description": "The required CI check runs the floor declared in package.json engines. Raising it is a support decision, not a dependency bump.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["node"],
+      "enabled": false
+    }
   ]
 }
