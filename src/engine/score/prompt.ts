@@ -3,6 +3,8 @@ import type { Job } from "../types.ts";
 import { formatComp } from "../enrich/comp.ts";
 import { excerpt } from "../enrich/normalize.ts";
 import { fieldById } from "../fields.ts";
+import { renderLearning } from "../learn.ts";
+import type { LearningProfile } from "../learn.ts";
 
 export const RUBRIC = `
 Score each posting 0-100 against the candidate profile, per track.
@@ -96,10 +98,14 @@ export function buildUser(
   profile: Profile,
   tracks: Track[],
   items: { job: Job; tracks: string[] }[],
+  learning?: LearningProfile,
 ): string {
   const parts: string[] = [];
 
   parts.push("# CANDIDATE PROFILE\n" + buildProfileBlock(profile));
+
+  const learned = renderLearning(learning);
+  if (learned) parts.push("# WHAT THIS CANDIDATE HAS DECIDED\n" + learned);
 
   parts.push(
     "# TRACKS\n" +

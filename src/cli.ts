@@ -24,6 +24,7 @@ import { readCv, extractProfile } from "./engine/profile/extract.ts";
 import { renderProfileYaml, writeProfile } from "./engine/profile/write.ts";
 import { provider } from "./engine/score/llm.ts";
 import { writeRunReport } from "./engine/audit.ts";
+import { buildLearning } from "./engine/learn.ts";
 import {
   install as installSchedule,
   kickstart,
@@ -57,6 +58,7 @@ const HELP = `JobPilot — personal job-search agent
                                    add --rescore to re-evaluate everything
   npm run digest                   write the digest
   npm run run                      collect + score + digest
+  npm run learn                    calibration from your own applied/skipped labels
   npm run feedback -- <id> <stage> shortlisted | applied | screening | interview
                                    | offer | rejected | skipped
   npm run funnel                   application funnel and conversion rates
@@ -347,6 +349,32 @@ async function main(): Promise<void> {
       if (!job) fail(`no posting found for id/prefix "${idOrPrefix}"`);
       recordDecision(db, job.id, label, note.join(" ") || undefined);
       log(`${label}: ${job.company} — ${job.title}  (${job.id})`);
+      return;
+    }
+
+    case "learn": {
+      const db = open();
+      const learning = buildLearning(db);
+      if (!learning.applied && !learning.skipped) {
+        log("no labels yet. Label a few postings: npm run feedback -- <id> applied");
+        return;
+      }
+
+      log(`applied ${learning.applied} · skipped ${learning.skipped}`);
+      for (const t of learning.trackCalibration) {
+        log(
+          `  ${t.track.padEnd(12)} applied median ${String(t.appliedMedian ?? "—").padStart(3)} ` +
+            `(n=${t.applied})   skipped median ${String(t.skippedMedian ?? "—").padStart(3)} (n=${t.skipped})`,
+        );
+      }
+
+      if (learning.suggestedMinScore !== undefined) {
+        log(`\nsuggested MIN_SCORE: ${learning.suggestedMinScore}`);
+        log("set it in .env to match where your own decisions actually sit");
+      } else {
+        log("\nnot enough separation yet to suggest a threshold");
+        log("the labels are already fed to the scorer as calibration evidence");
+      }
       return;
     }
 
