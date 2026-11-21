@@ -43,6 +43,17 @@ export function requireModel(): string {
 }
 
 /**
+ * Scoring is a measurement, not a writing task, so the default is greedy.
+ *
+ * Some reasoning models reject any temperature but their own default; set
+ * LLM_TEMPERATURE to that value when the provider answers 400.
+ */
+function temperature(): number {
+  const n = Number(env("LLM_TEMPERATURE") ?? 0);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+/**
  * Reasoning models spend output tokens on hidden thinking before writing the
  * answer. Too small a budget yields an empty reply, which looks like a broken
  * model rather than a truncated one.
@@ -152,6 +163,7 @@ async function anthropic(
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
+        temperature: temperature(),
         system,
         messages: [{ role: "user", content: user }],
       }),
@@ -201,6 +213,7 @@ async function openAiCompatible(opts: {
       body: JSON.stringify({
         model: opts.model,
         max_tokens: opts.maxTokens,
+        temperature: temperature(),
         messages: [
           { role: "system", content: opts.system },
           { role: "user", content: opts.user },
