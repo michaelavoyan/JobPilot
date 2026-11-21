@@ -99,7 +99,7 @@ Per track, from labelled postings joined to their jobs:
 
 | Signal | Source | Applied how |
 |---|---|---|
-| **Score band** | median applied vs skipped | calibration line in the prompt |
+| **Score band** | median positive vs negative decisions | calibration line in the prompt |
 | **Domain affinity** | job domains from `enrich` + profile domains | higher weight in the track brief |
 | **Stack affinity** | job text matched against `profile.stack` | prompt hint, not a filter |
 | **Location pattern** | accepted locations vs skipped ones | *suggestion only* — never auto-edits the radius |
@@ -127,7 +127,7 @@ learning.
 
 | Rule | Threshold |
 |---|---|
-| Any derivation | ≥ 5 applied **and** ≥ 10 skipped |
+| Any derivation | ≥ 5 positive **and** ≥ 10 negative decisions |
 | Per-track derivation | ≥ 3 in that track |
 | Note classification | nothing — one note is one data point |
 | Suggested threshold | ≥ 8 points of separation |

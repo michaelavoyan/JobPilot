@@ -9,7 +9,7 @@ import {
   setConstraintStatus,
   upsertJobs,
 } from "../src/storage/db.ts";
-import { buildLearning, LEARNING_VERSION, renderLearning } from "../src/engine/learn.ts";
+import { buildLearning, hasLearning, LEARNING_VERSION, renderLearning } from "../src/engine/learn.ts";
 import type { Job } from "../src/engine/types.ts";
 
 function job(id: string, description = "x"): Job {
@@ -289,4 +289,53 @@ function profileWith(stack: string[]) {
 test("the rules version is stable and short", () => {
   assert.match(LEARNING_VERSION, /^[0-9a-f]{8}$/);
   assert.equal(LEARNING_VERSION, LEARNING_VERSION, "same rules, same version");
+});
+
+/* ---------- which decisions count as evidence ---------- */
+
+test("a later funnel stage counts as a positive, not as nothing", () => {
+  const db = open(":memory:");
+  seed(db, "applied", [80, 82], "a");
+  seed(db, "interview", [86, 88], "i");
+  seed(db, "offer", [90], "o");
+  seed(db, "skipped", [50, 52, 54, 56, 58, 60, 62, 64, 66, 68], "s");
+
+  const learning = buildLearning(db);
+  assert.equal(learning.applied, 5);
+  assert.equal(learning.skipped, 10);
+  assert.equal(learning.enoughLabels, true);
+});
+
+test("rejected is neither a preference nor a rejection of the role", () => {
+  const db = open(":memory:");
+  seed(db, "applied", [80, 82, 84, 86, 88], "a");
+  seed(db, "rejected", [90, 92], "r");
+
+  const learning = buildLearning(db);
+  assert.equal(learning.applied, 5, "not counted as applied");
+  assert.equal(learning.skipped, 0, "and not counted as skipped");
+});
+
+test("preferences compare against decisions, not against every row", () => {
+  const db = open(":memory:");
+  seedWith(db, "applied", [78, 82, 84, 86], "a", "node platform");
+  seedWith(db, "skipped", [50, 52], "s", "java backend");
+  // A rejected decision says nothing about preference and must not dilute the
+  // baseline into making every term look preferred.
+  seedWith(db, "rejected", [88, 90, 92, 94], "r", "java backend");
+
+  const learning = buildLearning(db, profileWith(["node"]));
+  assert.equal(learning.preferences.length, 1);
+  assert.equal(learning.preferences[0].baselineRate, 0.67, "4 of 6 decisions, not 4 of 10");
+});
+
+test("a confirmed constraint is enough to score with learning", () => {
+  const db = open(":memory:");
+  assert.equal(hasLearning(buildLearning(db), ["b"]), false, "nothing learned from nothing");
+
+  proposeConstraints(db, [{ kind: "location_penalty", note: "too far" }]);
+  assert.equal(hasLearning(buildLearning(db), ["b"]), false, "a proposal changes nothing");
+
+  setConstraintStatus(db, "location_penalty", "confirmed");
+  assert.equal(hasLearning(buildLearning(db), ["b"]), true, "a confirmed one must reach the scorer");
 });

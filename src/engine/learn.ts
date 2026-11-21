@@ -4,6 +4,7 @@ import { listConstraints } from "../storage/db.ts";
 import type { Profile } from "./config.ts";
 import { describeConstraint } from "./notes.ts";
 import type { ConstraintKind } from "./notes.ts";
+import { isNegative, isPositive } from "./labels.ts";
 
 export interface LearningExample {
   title: string;
@@ -143,8 +144,8 @@ export function buildLearning(db: Db, profile?: Profile): LearningProfile {
     )
     .all() as Row[];
 
-  const applied = rows.filter((r) => r.label === "applied" || r.label === "shortlisted");
-  const skipped = rows.filter((r) => r.label === "skipped");
+  const applied = rows.filter((r) => isPositive(String(r.label)));
+  const skipped = rows.filter((r) => isNegative(String(r.label)));
 
   const tracks = [...new Set(rows.map((r) => String(r.track)))].sort();
   const trackCalibration: TrackCalibration[] = tracks.map((track) => {
@@ -210,10 +211,8 @@ export function buildLearning(db: Db, profile?: Profile): LearningProfile {
   const enoughOverall = applied.length >= MIN_APPLIED && skipped.length >= MIN_SKIPPED;
   for (const track of enoughOverall ? tracks : []) {
     const trackRows = rows.filter((r) => r.track === track);
-    const trackApplied = trackRows.filter(
-      (r) => r.label === "applied" || r.label === "shortlisted",
-    );
-    const trackSkipped = trackRows.filter((r) => r.label === "skipped");
+    const trackApplied = trackRows.filter((r) => isPositive(String(r.label)));
+    const trackSkipped = trackRows.filter((r) => isNegative(String(r.label)));
     byTrack[track] = {
       applied: pick(trackApplied, track, MAX_EXAMPLES, MIN_TRACK),
       skipped: pick(trackSkipped, track, 2, MIN_TRACK),
@@ -244,11 +243,13 @@ export function buildLearning(db: Db, profile?: Profile): LearningProfile {
  * on both frequency and lift. A term seen twice is an anecdote.
  */
 function derivePreferences(rows: Row[], profile: Profile): Preference[] {
-  const applied = rows.filter((r) => r.label === "applied" || r.label === "shortlisted");
-  const skipped = rows.filter((r) => r.label === "skipped");
+  const applied = rows.filter((r) => isPositive(String(r.label)));
+  const skipped = rows.filter((r) => isNegative(String(r.label)));
   if (!applied.length || !skipped.length) return [];
 
-  const baselineRate = applied.length / rows.length;
+  // Compared against the decisions that express a preference, not every row:
+  // a funnel stage like `rejected` is not a verdict on the role.
+  const baselineRate = applied.length / (applied.length + skipped.length);
   const terms = [...new Set([...profile.domains, ...profile.stack])]
     .map((t) => t.trim().toLowerCase())
     .filter((t) => t.length >= 3);
@@ -352,4 +353,17 @@ export function renderLearning(learning: LearningProfile | undefined, tracks: st
     "Use this as calibration evidence only. It tells you where their bar sits,",
     "not which of the current jobs to accept.",
   ].join("\n");
+}
+
+/**
+ * Whether anything from the decisions would actually reach the prompt.
+ *
+ * A confirmed constraint or a preference is learning even with too few labels
+ * for examples, so the gate is the rendered content, not a count.
+ */
+export function hasLearning(
+  learning: LearningProfile | undefined,
+  tracks: string[],
+): boolean {
+  return renderLearning(learning, tracks) !== "";
 }

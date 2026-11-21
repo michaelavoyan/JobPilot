@@ -21,7 +21,7 @@ import { hardFilter } from "./filter/rules.ts";
 import { scoreJobs } from "./score/rerank.ts";
 import type { ScoreRequest } from "./score/rerank.ts";
 import { provider } from "./score/llm.ts";
-import { buildLearning, LEARNING_VERSION, renderLearning } from "./learn.ts";
+import { buildLearning, hasLearning, LEARNING_VERSION, renderLearning } from "./learn.ts";
 import { renderDigest, writeDigest } from "./deliver/digest.ts";
 import { pushTelegram } from "./deliver/telegram.ts";
 import { numEnv, log, nowIso, warn } from "./util.ts";
@@ -159,9 +159,18 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
   }
 
   const learning = buildLearning(db, profile);
-  const usingLearning = learning.appliedExamples.length > 0;
+  // Constraints or preferences alone are learning too: a confirmed note must
+  // reach the scorer even before there are enough labels for examples.
+  const usingLearning = hasLearning(learning, tracks.map((t) => t.key));
   if (usingLearning) {
-    log(`learning from ${learning.applied} applied and ${learning.skipped} skipped postings`);
+    const parts: string[] = [];
+    if (learning.applied || learning.skipped) {
+      parts.push(`${learning.applied} applied and ${learning.skipped} skipped postings`);
+    }
+    if (learning.constraints.length) {
+      parts.push(`${learning.constraints.length} confirmed constraint(s)`);
+    }
+    log(`learning from ${parts.join(" and ")}`);
   }
 
   const outcome = await scoreJobs(requests, tracks, profile, {
