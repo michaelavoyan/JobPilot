@@ -26,7 +26,8 @@
     "funnel": "node src/cli.ts funnel",
     "schedule": "node src/cli.ts schedule",
     "test": "npm run typecheck && node --test tests/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "learn": "node src/cli.ts learn"
   },
   "dependencies": {
     "fflate": "^0.8.3",
