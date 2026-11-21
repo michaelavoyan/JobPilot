@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { provider, requireModel } from "../src/engine/score/llm.ts";
+import { chat, provider, requireModel } from "../src/engine/score/llm.ts";
 
 const KEYS = [
   "ANTHROPIC_API_KEY",
@@ -81,4 +81,66 @@ test("requireModel refuses to guess a model id", () => {
 
 test("requireModel returns the configured id", () => {
   withEnv({ LLM_MODEL: "deepseek-chat" }, () => assert.equal(requireModel(), "deepseek-chat"));
+});
+
+test("scoring asks the model for no sampling noise", async (t) => {
+  const saved = { model: process.env.LLM_MODEL, anthropic: process.env.ANTHROPIC_API_KEY };
+  process.env.LLM_MODEL = "test-model";
+  process.env.ANTHROPIC_API_KEY = "test-key";
+  delete process.env.OPENCODE_API_KEY;
+  delete process.env.DEEPSEEK_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+
+  let sent: Record<string, unknown> = {};
+  t.mock.method(globalThis, "fetch", async (_url: string, init: { body: string }) => {
+    sent = JSON.parse(init.body) as Record<string, unknown>;
+    return new Response(
+      JSON.stringify({ content: [{ type: "text", text: "{}" }], usage: {} }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  });
+
+  try {
+    await chat("system", "user", 100);
+    assert.equal(sent.temperature, 0, "a measurement must not sample");
+  } finally {
+    for (const [key, value] of [
+      ["LLM_MODEL", saved.model],
+      ["ANTHROPIC_API_KEY", saved.anthropic],
+    ] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test("the OpenAI-compatible providers ask for the same", async (t) => {
+  const saved = { model: process.env.LLM_MODEL, opencode: process.env.OPENCODE_API_KEY };
+  process.env.LLM_MODEL = "test-model";
+  process.env.OPENCODE_API_KEY = "test-key";
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.DEEPSEEK_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+
+  let sent: Record<string, unknown> = {};
+  t.mock.method(globalThis, "fetch", async (_url: string, init: { body: string }) => {
+    sent = JSON.parse(init.body) as Record<string, unknown>;
+    return new Response(
+      JSON.stringify({ choices: [{ message: { content: "{}" } }], usage: {} }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  });
+
+  try {
+    await chat("system", "user", 100);
+    assert.equal(sent.temperature, 0);
+  } finally {
+    for (const [key, value] of [
+      ["LLM_MODEL", saved.model],
+      ["OPENCODE_API_KEY", saved.opencode],
+    ] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
