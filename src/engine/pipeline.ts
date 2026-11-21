@@ -18,6 +18,7 @@ import { loadMarket, loadProfile, loadTracks, profileHash } from "./config.ts";
 import { collect } from "./ingest/index.ts";
 import { boardToCompany } from "./discovery.ts";
 import { hardFilter } from "./filter/rules.ts";
+import { combineScoreOutcomes } from "./score/merge.ts";
 import { scoreJobs } from "./score/rerank.ts";
 import type { ScoreRequest } from "./score/rerank.ts";
 import { provider } from "./score/llm.ts";
@@ -173,11 +174,28 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
     log(`learning from ${parts.join(" and ")}`);
   }
 
-  const outcome = await scoreJobs(requests, tracks, profile, {
+  // One sample is the default. Two halves the model's run-to-run noise at
+  // twice the cost, which is the user's trade to make, not a silent default.
+  const samples = Math.min(3, Math.max(1, numEnv("SCORE_SAMPLES", 1)));
+  const scoreOptions = {
     batchSize: numEnv("BATCH_SIZE", 6),
     concurrency: numEnv("LLM_CONCURRENCY", 2),
     learning: usingLearning ? learning : undefined,
-  });
+  };
+
+  const scoreWithSamples = async (
+    reqs: typeof requests,
+    opts: Parameters<typeof scoreJobs>[3],
+  ) => {
+    if (samples === 1) return scoreJobs(reqs, tracks, profile, opts);
+    const runs = [];
+    for (let i = 0; i < samples; i++) {
+      runs.push(await scoreJobs(reqs, tracks, profile, opts));
+    }
+    return combineScoreOutcomes(runs);
+  };
+
+  const outcome = await scoreWithSamples(requests, scoreOptions);
 
   // A bounded shadow pass: the same postings scored without learning, so the
   // comparison in `eval` has something to compare against. Off unless enabled,
@@ -189,10 +207,12 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
       .filter((r) => outcome.learnedJobIds.has(r.job.id))
       .slice(0, shadowCount);
     if (shadowRequests.length) {
-      const baseline = await scoreJobs(shadowRequests, tracks, profile, {
+      const shadowOptions = {
         batchSize: numEnv("BATCH_SIZE", 6),
         concurrency: 1,
-      });
+      };
+      const baseline = await scoreWithSamples(shadowRequests, shadowOptions);
+
       if (baseline.scores.length) {
         saveShadowScores(db, baseline.scores, baseline.model, LEARNING_VERSION);
         log(`shadow-scored ${baseline.scores.length} posting(s) without learning`);
@@ -234,6 +254,12 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
         ),
       });
     }
+  }
+  if (samples > 1 && "spread" in outcome) {
+    log(
+      `averaged ${samples} samples · mean distance from the reported score ` +
+        `${(outcome as { spread: number }).spread} points`,
+    );
   }
   summary.scored = new Set(outcome.scores.map((s) => s.jobId)).size;
   summary.failed = outcome.failed.length;
