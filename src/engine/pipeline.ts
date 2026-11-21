@@ -181,11 +181,12 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
 
   // A bounded shadow pass: the same postings scored without learning, so the
   // comparison in `eval` has something to compare against. Off unless enabled,
-  // because it doubles the cost of the postings it touches.
-  const shadowCount = usingLearning ? numEnv("LEARNING_SHADOW", 0) : 0;
+  // because it doubles the cost of the postings it touches. Only postings that
+  // really were scored with learning are worth a baseline twin.
+  const shadowCount = outcome.learnedJobIds.size ? numEnv("LEARNING_SHADOW", 0) : 0;
   if (shadowCount > 0 && outcome.scores.length) {
     const shadowRequests = requests
-      .filter((r) => outcome.scores.some((s) => s.jobId === r.job.id))
+      .filter((r) => outcome.learnedJobIds.has(r.job.id))
       .slice(0, shadowCount);
     if (shadowRequests.length) {
       const baseline = await scoreJobs(shadowRequests, tracks, profile, {
@@ -199,14 +200,29 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
     }
   }
 
-  if (outcome.scores.length) {
-    saveScores(db, outcome.scores, outcome.model, pHash, {
-      variant: usingLearning ? "learned" : "baseline",
-      learningAt: usingLearning ? nowIso() : undefined,
-      version: usingLearning ? LEARNING_VERSION : undefined,
-    });
+  if (usingLearning && outcome.scores.length && !outcome.learnedJobIds.size) {
+    warn(
+      "nothing learned applies to the tracks in this batch; every score was written as baseline",
+    );
+  }
 
-    if (usingLearning) {
+  if (outcome.scores.length) {
+    // Split the run: a batch whose prompt carried no learned evidence is a
+    // baseline score and must not be counted in the comparison.
+    const learnedScores = outcome.scores.filter((s) => outcome.learnedJobIds.has(s.jobId));
+    const baselineScores = outcome.scores.filter((s) => !outcome.learnedJobIds.has(s.jobId));
+    if (baselineScores.length) {
+      saveScores(db, baselineScores, outcome.model, pHash);
+    }
+    if (learnedScores.length) {
+      saveScores(db, learnedScores, outcome.model, pHash, {
+        variant: "learned",
+        learningAt: nowIso(),
+        version: LEARNING_VERSION,
+      });
+    }
+
+    if (learnedScores.length) {
       // The exact block that reached the model, so a past score can be
       // explained rather than guessed at.
       recordLearningRun(db, {

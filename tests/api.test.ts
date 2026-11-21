@@ -73,3 +73,46 @@ test("unknown routes are 404", async () => {
 test("path traversal is refused", async () => {
   assert.equal((await fetch(`${base}/../package.json`)).status, 404);
 });
+
+test("a request from another site is refused", async () => {
+  const res = await fetch(`${base}/api/health`, {
+    headers: { "sec-fetch-site": "cross-site" },
+  });
+  assert.equal(res.status, 403);
+});
+
+test("a cross-site GET cannot start a run", async () => {
+  // `/api/run` is a GET because the page reads it as an event stream. Without
+  // this guard an <img> tag on any website could spend the user's credits.
+  const res = await fetch(`${base}/api/run?action=stats`, {
+    headers: { "sec-fetch-site": "cross-site" },
+  });
+  assert.equal(res.status, 403);
+});
+
+test("a foreign Origin is refused even when Sec-Fetch-Site is absent", async () => {
+  const res = await fetch(`${base}/api/learning/constraint`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "https://evil.example" },
+    body: JSON.stringify({ id: "x", status: "confirmed" }),
+  });
+  assert.equal(res.status, 403);
+});
+
+test("a same-origin request reaches its route", async () => {
+  const res = await fetch(`${base}/api/learning/constraint`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: base },
+    body: JSON.stringify({ id: "no-such-constraint", status: "confirmed" }),
+  });
+  assert.equal(res.status, 404, "refused only for the missing id, not the origin");
+});
+
+test("a body that is not JSON is refused before it is parsed", async () => {
+  const res = await fetch(`${base}/api/undo`, {
+    method: "POST",
+    headers: { "content-type": "text/plain" },
+    body: JSON.stringify({ jobId: "x" }),
+  });
+  assert.equal(res.status, 415);
+});

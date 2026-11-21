@@ -7,6 +7,7 @@ import { configDir, setConfigDir } from "../src/engine/util.ts";
 import { loadProfile, loadTracks } from "../src/engine/config.ts";
 import { scoreJobs } from "../src/engine/score/rerank.ts";
 import type { ScoreRequest } from "../src/engine/score/rerank.ts";
+import type { LearningProfile } from "../src/engine/learn.ts";
 import type { ChatResult } from "../src/engine/score/llm.ts";
 import type { Job } from "../src/engine/types.ts";
 
@@ -153,4 +154,46 @@ test("an empty reply is not treated as a zero", async () => {
   );
   assert.equal(result.scores.length, 0);
   assert.equal(result.failed.length, 1);
+});
+
+test("a batch with nothing learned about its track is not marked as learned", async () => {
+  const dir = configWithMarket();
+  const learning: LearningProfile = {
+    applied: 5,
+    skipped: 10,
+    enoughLabels: true,
+    preferences: [],
+    constraints: [],
+    byTrack: {
+      // Examples exist for track "a" only.
+      a: {
+        applied: [{ title: "Director", company: "Acme", score: 80, reasons: [] }],
+        skipped: [{ title: "VP", company: "Beta", score: 30, reasons: [] }],
+      },
+    },
+    trackCalibration: [],
+    appliedExamples: [],
+    skippedExamples: [],
+  };
+
+  const calls: string[] = [];
+  const chatFn = async (_system: string, user: string) => {
+    calls.push(user);
+    return reply({
+      results: [{ i: 0, scores: { b: { score: 70, reasons: ["x"], flags: [] } } }],
+    });
+  };
+
+  const result = await withConfig(dir, () =>
+    scoreJobs([{ job: job("j"), tracks: ["b"] }], loadTracks(), loadProfile(), {
+      batchSize: 5,
+      concurrency: 1,
+      learning,
+      chatFn,
+    }),
+  );
+
+  assert.equal(result.scores.length, 1);
+  assert.equal(result.learnedJobIds.size, 0, "track b has no learned evidence");
+  assert.doesNotMatch(calls[0], /WHAT THIS CANDIDATE HAS DECIDED/);
 });
