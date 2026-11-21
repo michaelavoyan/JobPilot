@@ -10,6 +10,7 @@ import {
 } from "../storage/db.ts";
 import type { Track } from "./config.ts";
 import { LEARNING_VERSION } from "./learn.ts";
+import { isNegative, isPositive } from "./labels.ts";
 import { log } from "./util.ts";
 
 type Row = Record<string, unknown>;
@@ -156,8 +157,8 @@ export function shadowStats(pairs: ShadowPair[]): {
     pairs.filter((p) => Math.abs(p.learned - p.baseline) <= 5).length / pairs.length;
 
   const labelled = pairs.filter((p) => p.label);
-  const positives = labelled.filter((p) => p.label === "applied" || p.label === "shortlisted");
-  const negatives = labelled.filter((p) => p.label === "skipped");
+  const positives = labelled.filter((p) => isPositive(String(p.label)));
+  const negatives = labelled.filter((p) => isNegative(String(p.label)));
 
   const learnedPos = positives.map((p) => p.learned);
   const learnedNeg = negatives.map((p) => p.learned);
@@ -165,7 +166,7 @@ export function shadowStats(pairs: ShadowPair[]): {
   const baseNeg = negatives.map((p) => p.baseline);
 
   const k = Math.min(10, labelled.length);
-  const positive = (p: ShadowPair) => p.label === "applied" || p.label === "shortlisted";
+  const positive = (p: ShadowPair) => isPositive(String(p.label));
   const at = (key: "learned" | "baseline") =>
     k
       ? [...labelled].sort((a, b) => b[key] - a[key]).slice(0, k).filter(positive).length / k
@@ -197,7 +198,7 @@ export function precisionAt(
     .sort((a, b) => b.score - a.score)
     .slice(0, k);
   if (!group.length) return null;
-  const hits = group.filter((r) => r.label === "applied" || r.label === "shortlisted").length;
+  const hits = group.filter((r) => isPositive(r.label)).length;
   return hits / group.length;
 }
 
@@ -208,8 +209,8 @@ export function precisionAt(
  */
 export function runEval(db: Db, tracks: Track[]): void {
   const labels = decisions(db);
-  const positives = labels.filter((l) => l.label === "applied" || l.label === "shortlisted").length;
-  const negatives = labels.filter((l) => l.label === "skipped").length;
+  const positives = labels.filter((l) => isPositive(l.label)).length;
+  const negatives = labels.filter((l) => isNegative(l.label)).length;
 
   log(`labels: ${labels.length} (${positives} positive, ${negatives} negative)`);
 
@@ -246,7 +247,7 @@ export function runEval(db: Db, tracks: Track[]): void {
     );
     if (value === null) continue;
     const group = rows.filter((r) => String(r.track) === track.key).slice(0, 10);
-    const hits = group.filter((r) => r.label === "applied" || r.label === "shortlisted").length;
+    const hits = group.filter((r) => isPositive(String(r.label))).length;
     log(`  ${track.key.padEnd(12)} ${hits}/${group.length} = ${value.toFixed(2)}`);
   }
 
