@@ -10,6 +10,8 @@ Each one is scored, explained in a sentence, and ready to apply to.
 
 No searching. No scrolling. No LinkedIn.
 
+![JobPilot](docs/screenshot.png)
+
 ---
 
 ## What it does

@@ -4,7 +4,7 @@ import type { ScoredJob } from "../types.ts";
 import type { Track } from "../config.ts";
 import { formatComp } from "../enrich/comp.ts";
 import { excerpt } from "../enrich/normalize.ts";
-import { outDir, log, today } from "../util.ts";
+import { outDir, log, readableFlag, today } from "../util.ts";
 
 export interface DigestOptions {
   minScore: number;
@@ -85,7 +85,9 @@ function renderRow(job: ScoredJob): string {
 
   const header = `### ${job.score} · ${job.company} · ${job.title} — ${where}`;
   const reason = job.reasons.length ? job.reasons.join(" · ") : "no reasons returned";
-  const flags = job.flags.length ? `\n\`${job.flags.join("` `")}\`` : "";
+  const flags = job.flags.length
+    ? `\n\`${job.flags.map(readableFlag).join("` `")}\``
+    : "";
   const body = excerpt(job.description, 240);
 
   return [

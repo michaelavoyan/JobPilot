@@ -87,3 +87,11 @@ export function today(): string {
 export function nowIso(): string {
   return new Date().toISOString();
 }
+
+/**
+ * Flags are produced as machine tokens (`org_size_unclear`) and read by people.
+ * The underscore is the only part that is noise.
+ */
+export function readableFlag(flag: string): string {
+  return flag.replace(/_/g, " ").trim();
+}

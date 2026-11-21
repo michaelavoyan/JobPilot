@@ -96,3 +96,13 @@ test("detect refuses unsupported hosts with a clear message", async () => {
     /unsupported host/,
   );
 });
+
+test("machine flags are shown as words", () => {
+  const md = renderDigest([scored({ flags: ["org_size_unclear", "aws_infra_gap"] })], tracks, {
+    minScore: 65,
+    maxRows: 15,
+  });
+  assert.match(md, /org size unclear/);
+  assert.match(md, /aws infra gap/);
+  assert.doesNotMatch(md, /org_size_unclear/);
+});
