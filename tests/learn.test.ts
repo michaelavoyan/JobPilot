@@ -221,30 +221,42 @@ test("a term must appear often enough before it is called a preference", () => {
   assert.deepEqual(learning.preferences, [], "two mentions prove nothing");
 });
 
+test("preferences wait for the same sample as everything else", () => {
+  const db = open(":memory:");
+  // Four applied and five skipped: below the plan's 5/10 rule.
+  seedWith(db, "applied", [70, 71, 72, 73], "a", "make platform");
+  seedWith(db, "skipped", [80, 81, 82, 83, 84], "s", "make backend");
+
+  const learning = buildLearning(db, profileWith(["make"]));
+  assert.equal(learning.enoughLabels, false);
+  assert.deepEqual(learning.preferences, [], "a common build tool is not a preference");
+});
+
 test("a term concentrated in applications becomes a preference", () => {
   const db = open(":memory:");
-  seedWith(db, "applied", [78, 82, 84, 86], "a", "platform engineering in node");
-  seedWith(db, "skipped", [50, 52], "s", "backend services in java");
+  seedWith(db, "applied", [70, 78, 82, 84, 86], "a", "platform engineering in node");
+  seedWith(db, "skipped", [40, 44, 48, 50, 52, 54, 56, 58, 60, 62], "s", "backend in java");
 
   const learning = buildLearning(db, profileWith(["node"]));
+  assert.equal(learning.enoughLabels, true);
   assert.equal(learning.preferences.length, 1);
   assert.equal(learning.preferences[0].term, "node");
-  assert.equal(learning.preferences[0].applied, 4);
+  assert.equal(learning.preferences[0].applied, 5);
   assert.equal(learning.preferences[0].skipped, 0);
 });
 
 test("a term that appears equally on both sides is not a preference", () => {
   const db = open(":memory:");
-  seedWith(db, "applied", [82, 84], "a", "node platform");
-  seedWith(db, "skipped", [50, 52], "s", "node backend");
+  seedWith(db, "applied", [70, 78, 82, 84, 86], "a", "node platform");
+  seedWith(db, "skipped", [40, 44, 48, 50, 52, 54, 56, 58, 60, 62], "s", "node backend");
 
   assert.deepEqual(buildLearning(db, profileWith(["node"])).preferences, []);
 });
 
 test("preferences and constraints are rendered side by side", () => {
   const db = open(":memory:");
-  seedWith(db, "applied", [78, 82, 84, 86], "a", "node platform");
-  seedWith(db, "skipped", [50, 52], "s", "java backend");
+  seedWith(db, "applied", [70, 78, 82, 84, 86], "a", "node platform");
+  seedWith(db, "skipped", [40, 44, 48, 50, 52, 54, 56, 58, 60, 62], "s", "java backend");
   proposeConstraints(db, [{ kind: "domain_penalty", value: "adtech", note: "no more adtech" }]);
   setConstraintStatus(db, "domain_penalty:adtech", "confirmed");
 
@@ -318,15 +330,15 @@ test("rejected is neither a preference nor a rejection of the role", () => {
 
 test("preferences compare against decisions, not against every row", () => {
   const db = open(":memory:");
-  seedWith(db, "applied", [78, 82, 84, 86], "a", "node platform");
-  seedWith(db, "skipped", [50, 52], "s", "java backend");
+  seedWith(db, "applied", [70, 78, 82, 84, 86], "a", "node platform");
+  seedWith(db, "skipped", [40, 44, 48, 50, 52, 54, 56, 58, 60, 62], "s", "java backend");
   // A rejected decision says nothing about preference and must not dilute the
   // baseline into making every term look preferred.
   seedWith(db, "rejected", [88, 90, 92, 94], "r", "java backend");
 
   const learning = buildLearning(db, profileWith(["node"]));
   assert.equal(learning.preferences.length, 1);
-  assert.equal(learning.preferences[0].baselineRate, 0.67, "4 of 6 decisions, not 4 of 10");
+  assert.equal(learning.preferences[0].baselineRate, 0.33, "5 of 15 decisions, not 5 of 19");
 });
 
 test("a confirmed constraint is enough to score with learning", () => {

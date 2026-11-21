@@ -219,7 +219,11 @@ export function buildLearning(db: Db, profile?: Profile): LearningProfile {
     };
   }
 
-  const preferences = profile ? derivePreferences(rows, profile) : [];
+  // The plan's rule is that no derivation happens below five positive and ten
+  // negative decisions. Preferences were the exception, and with four labels
+  // they produced "make" as a preference — a build tool, not a preference.
+  const preferences =
+    profile && enoughOverall ? derivePreferences(rows, profile) : [];
 
   return {
     applied: applied.length,
