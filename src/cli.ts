@@ -446,6 +446,12 @@ async function main(): Promise<void> {
       if (learning.suggestedMinScore !== undefined) {
         log(`\nsuggested MIN_SCORE: ${learning.suggestedMinScore}`);
         log("set it in .env to match where your own decisions actually sit");
+      } else if (!learning.enoughLabels) {
+        log(
+          `\nnot enough labels to influence the scorer yet: need 5 applied and 10 skipped, ` +
+            `have ${learning.applied} and ${learning.skipped}`,
+        );
+        log("the scorer still runs on your profile alone");
       } else {
         log("\nnot enough separation yet to suggest a threshold");
         log("the labels are already fed to the scorer as calibration evidence");
