@@ -10,7 +10,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The check the branch protection requires. It runs the floor declared in
+  # package.json, so a break on the oldest supported Node cannot ship.
   test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Runs the compiler first, then the suite.
+      - run: npm test
+
+  # The current release line, so a change that only breaks on the newest Node
+  # is visible before it reaches a user. Not a required check: the floor is the
+  # promise, this is the early warning.
+  test-next:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -21,6 +41,4 @@ jobs:
           cache: npm
 
       - run: npm ci
-
-      # Runs the compiler first, then the suite.
       - run: npm test
