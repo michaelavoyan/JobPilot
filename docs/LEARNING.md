@@ -3,10 +3,10 @@
 What it takes to go from "calibration text injected into a prompt" to a loop
 that learns from decisions and **proves** it ranks better.
 
-> **Status.** L0 (measurement), L1 (per-track examples) and L2 (similarity
-> selection) are implemented, plus `learn --reset`. L3 (notes to constraints),
-> L4 (preference hints), the UI section of L5 and L6 (a calibrated comparison)
-> are **not** implemented — see §10 for what each needs.
+> **Status.** L0–L5 are implemented: measurement, per-track examples,
+> similarity selection, notes turned into confirmed constraints, preference
+> hints, and a page section that shows all of it. L6 — the calibrated comparison
+> that proves anything — needs 50 labels per class and there are zero.
 
 ---
 
@@ -193,19 +193,24 @@ class, rather than printing a number that looks like proof.
 **CLI**
 
 ```
-npm run learn          # calibration report, suggested threshold, constraints
-npm run eval           # precision@10, AUC, variant comparison + CI
-npm run learn -- reset # forget derived state, keep labels
+npm run learn                        # calibration, preferences, proposed constraints
+npm run learn -- --confirm <id>      # accept a constraint; it reaches the prompt
+npm run learn -- --reject <id>       # discard it
+npm run learn -- --reset             # forget shadow scores and proposals, keep labels
+npm run eval                         # precision@10, AUC, variant comparison + CI
 ```
 
-**UI** — one section, no new concepts:
+**UI** — one section, no new concepts. The counts are the user's own
+decisions; the comparison appears only once a shadow pass has run:
 
 ```
 Learning
-  41 applied · 87 skipped · measured over 3 runs
-  precision@10  baseline 0.40 → learned 0.60  (95% CI 0.35–0.78)
-  not enough data for a per-track conclusion
-  [ Review 2 learned constraints ]
+  9 applied · 12 skipped
+  Your applications score around 78; the ones you skip around 55.  [Use 71]
+  Applied jobs outrank skipped ones 78% of the time (95% range 68–88%),
+  without learning 71% — too early to call that an improvement.
+
+  Down-weight roles in adtech            your note: "no more adtech"  [Keep] [Ignore]
 ```
 
 ---
@@ -232,6 +237,8 @@ Learning
 | L4 | Preference hints | domain/stack/location patterns in the prompt | 1.0 |
 | L5 | Surface | `learn` reset, eval report, UI section | 0.5 |
 | L6 | Calibration run | 50 labels per class, one measured comparison written up | 1.0 |
+
+L0–L5 are done. L6 is not code: it is the labelling work the loop exists for.
 
 **~5.5 days**, but L0 is the only phase that must come first, and L6 is the only
 one that proves anything.

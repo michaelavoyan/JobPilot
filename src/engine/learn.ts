@@ -1,5 +1,8 @@
-import type { Db } from "../storage/db.ts";
-import type { Score } from "./types.ts";
+import type { Constraint, Db } from "../storage/db.ts";
+import { listConstraints } from "../storage/db.ts";
+import type { Profile } from "./config.ts";
+import { describeConstraint } from "./notes.ts";
+import type { ConstraintKind } from "./notes.ts";
 
 export interface LearningExample {
   title: string;
@@ -21,9 +24,26 @@ export interface TrackExamples {
   skipped: LearningExample[];
 }
 
+export interface Preference {
+  term: string;
+  /** How many labelled postings mentioned it in each group. */
+  applied: number;
+  skipped: number;
+  /** Applied rate among postings that mention it, 0..1. */
+  appliedRate: number;
+  /** Applied rate among all labelled postings — the comparison. */
+  baselineRate: number;
+}
+
 export interface LearningProfile {
   applied: number;
   skipped: number;
+  /** Whether the sample is large enough to say anything about the score scale. */
+  enoughLabels: boolean;
+  /** Terms that appeared disproportionately in the postings the user applied to. */
+  preferences: Preference[];
+  /** Constraints stated in notes and **confirmed by the user**. */
+  constraints: Constraint[];
   /** Examples scoped to the track being scored, not to the whole history. */
   byTrack: Record<string, TrackExamples>;
   trackCalibration: TrackCalibration[];
@@ -41,6 +61,11 @@ const MIN_GAP = 8;
 const MAX_EXAMPLES = 3;
 /** A track needs its own sample before it gets its own examples. */
 const MIN_TRACK = 3;
+/** A term must appear in this many labelled postings before it means anything. */
+const MIN_TERM = 4;
+/** A rate difference smaller than this is indistinguishable from noise. */
+const MIN_LIFT = 0.3;
+const MAX_PREFERENCES = 3;
 
 function median(values: number[]): number | undefined {
   if (!values.length) return undefined;
@@ -82,11 +107,11 @@ type Row = Record<string, unknown>;
  * this user's applications actually sit against the score scale — plus a few
  * of their own decisions as worked examples.
  */
-export function buildLearning(db: Db): LearningProfile {
+export function buildLearning(db: Db, profile?: Profile): LearningProfile {
   const rows = db
     .prepare(
       `SELECT d.label AS label, s.track AS track, s.score AS score, s.reasons AS reasons,
-              j.title AS title, j.company AS company
+              j.title AS title, j.company AS company, j.description AS description
        FROM decisions d
        JOIN scores s ON s.job_id = d.job_id
        JOIN jobs j ON j.id = d.job_id`,
@@ -170,15 +195,58 @@ export function buildLearning(db: Db): LearningProfile {
     };
   }
 
+  const preferences = profile ? derivePreferences(rows, profile) : [];
+
   return {
     applied: applied.length,
     skipped: skipped.length,
+    enoughLabels: enoughOverall,
+    preferences,
+    constraints: listConstraints(db, "confirmed"),
     byTrack,
     trackCalibration,
     suggestedMinScore,
     appliedExamples: pick(applied, "", MAX_EXAMPLES, MIN_APPLIED),
     skippedExamples: pick(skipped, "", 2, MIN_SKIPPED),
   };
+}
+
+/**
+ * Which of the candidate's own domains and technologies show up in the roles
+ * they accept far more often than in the ones they skip.
+ *
+ * This is correlation in a small sample, so it is reported as a hint and gated
+ * on both frequency and lift. A term seen twice is an anecdote.
+ */
+function derivePreferences(rows: Row[], profile: Profile): Preference[] {
+  const applied = rows.filter((r) => r.label === "applied" || r.label === "shortlisted");
+  const skipped = rows.filter((r) => r.label === "skipped");
+  if (!applied.length || !skipped.length) return [];
+
+  const baselineRate = applied.length / rows.length;
+  const terms = [...new Set([...profile.domains, ...profile.stack])]
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => t.length >= 3);
+
+  const scored: Preference[] = [];
+  for (const term of terms) {
+    const has = (r: Row) => String(r.description ?? "").toLowerCase().includes(term);
+    const a = applied.filter(has).length;
+    const s = skipped.filter(has).length;
+    if (a + s < MIN_TERM) continue;
+    const appliedRate = a / (a + s);
+    if (appliedRate - baselineRate < MIN_LIFT) continue;
+    scored.push({ term, applied: a, skipped: s, appliedRate, baselineRate });
+  }
+
+  return scored
+    .sort((a, b) => b.appliedRate - a.appliedRate)
+    .slice(0, MAX_PREFERENCES)
+    .map((p) => ({
+      ...p,
+      appliedRate: Math.round(p.appliedRate * 100) / 100,
+      baselineRate: Math.round(p.baselineRate * 100) / 100,
+    }));
 }
 
 /**
@@ -206,12 +274,36 @@ export function renderLearning(learning: LearningProfile | undefined, tracks: st
     sections.push(lines.join("\n"));
   }
 
-  if (!sections.length) return "";
+  const extra: string[] = [];
+  if (learning.preferences.length) {
+    extra.push("Roles they accept mention these more often than the ones they skip:");
+    extra.push(...learning.preferences.map((p) => `- ${p.term}`));
+  }
+  if (learning.constraints.length) {
+    extra.push("");
+    extra.push("They stated these constraints themselves:");
+    extra.push(
+      ...learning.constraints.map(
+        (c) => `- ${describeConstraint(c.kind as ConstraintKind, c.value)} (\"${c.note}\")`,
+      ),
+    );
+  }
+
+  if (!sections.length && !extra.length) return "";
+
+  const hasLabels = learning.applied > 0 || learning.skipped > 0;
+  const head = hasLabels
+    ? [
+        `Learned from this candidate's own decisions (${learning.applied} applied, ${learning.skipped} skipped).`,
+        "",
+        ...sections,
+        ...(sections.length && extra.length ? [""] : []),
+      ]
+    : [];
 
   return [
-    `Learned from this candidate's own decisions (${learning.applied} applied, ${learning.skipped} skipped).`,
-    "",
-    ...sections,
+    ...head,
+    ...extra,
     "",
     "Use this as calibration evidence only. It tells you where their bar sits,",
     "not which of the current jobs to accept.",

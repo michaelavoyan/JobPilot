@@ -436,6 +436,7 @@ async function loadJobs() {
   }
 
   for (const job of jobs) list.appendChild(renderJob(job));
+  loadLearning();
 }
 
 function renderJob(job) {
@@ -517,9 +518,180 @@ function offerUndo(job, label) {
     loadHidden();
   });
   bar.appendChild(undo);
-  document.body.appendChild(bar);
 
-  setTimeout(() => bar.remove(), 7000);
+  // A skip is the moment the reason is known. It is optional, and a note only
+  // ever proposes a rule — it changes nothing until it is confirmed.
+  let noteInput;
+  if (label === "skipped") {
+    noteInput = el("input", "toast-note");
+    noteInput.type = "text";
+    noteInput.placeholder = "Why? e.g. too far — optional";
+    noteInput.setAttribute("aria-label", "Why you skipped this job");
+    bar.appendChild(noteInput);
+
+    const save = async () => {
+      const note = noteInput.value.trim();
+      bar.remove();
+      if (!note) return;
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jobId: job.id, label, note }),
+      });
+      loadLearning();
+    };
+
+    const keep = el("button", "", "Save note");
+    keep.addEventListener("click", save);
+    bar.appendChild(keep);
+    noteInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") save();
+    });
+  }
+
+  document.body.appendChild(bar);
+  if (noteInput) noteInput.focus();
+
+  setTimeout(() => bar.remove(), noteInput ? 25_000 : 7_000);
+}
+
+/* ---------- learning ---------- */
+
+function percent(value) {
+  return Math.round(value * 100) + "%";
+}
+
+function medianText(tracks, key) {
+  const known = tracks.filter((t) => typeof t[key] === "number");
+  if (!known.length) return null;
+  const total = known.reduce((sum, t) => sum + t[key] * (t.applied + t.skipped), 0);
+  const weight = known.reduce((sum, t) => sum + t.applied + t.skipped, 0);
+  return Math.round(total / weight);
+}
+
+async function loadLearning() {
+  let data;
+  try {
+    const res = await fetch("/api/learning");
+    if (!res.ok) return;
+    data = await res.json();
+  } catch {
+    return;
+  }
+
+  const section = $("learning");
+  const constraints = data.constraints || [];
+  const proposed = constraints.filter((c) => c.status === "proposed");
+  const confirmed = constraints.filter((c) => c.status === "confirmed");
+  const labelled = (data.applied || 0) + (data.skipped || 0);
+  if (!labelled && !proposed.length) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+
+  $("learningSummary").textContent =
+    `${data.applied} applied · ${data.skipped} skipped`;
+
+  const appliedMedian = medianText(data.tracks || [], "appliedMedian");
+  const skippedMedian = medianText(data.tracks || [], "skippedMedian");
+
+  const evidence = [];
+  // Two decisions produce two medians; they are not a bar. The thresholds are
+  // the same ones the CLI uses before it prints anything.
+  if (data.enoughLabels && appliedMedian !== null && skippedMedian !== null) {
+    evidence.push(
+      `Your applications score around ${appliedMedian}; the ones you skip around ${skippedMedian}.`,
+    );
+    if (data.suggestedMinScore !== null) {
+      evidence.push(`Your own decisions put the bar at about ${data.suggestedMinScore}.`);
+    }
+  } else {
+    evidence.push("Not enough decisions yet to tell where your bar sits.");
+  }
+
+  const prefs = data.preferences || [];
+  if (prefs.length) {
+    evidence.push("Roles you accept mention " + prefs.map((p) => p.term).join(", ") + " more often.");
+  }
+
+  $("learningEvidence").textContent = evidence.join(" ");
+  if (data.enoughLabels && data.suggestedMinScore !== null && appliedMedian !== null) {
+    const use = el("button", "ghost threshold-button", "Use it");
+    use.addEventListener("click", () => {
+      $("filterMin").value = String(data.suggestedMinScore);
+      loadJobs();
+    });
+    $("learningEvidence").appendChild(use);
+  }
+
+  if (data.shadow) {
+    const s2 = data.shadow;
+    const parts = [];
+    if (s2.precision) {
+      parts.push(
+        `Of your top ${s2.precision.k} labelled postings, ${percent(s2.precision.learned)} were ones you applied to` +
+          ` (${percent(s2.precision.baseline)} without learning).`,
+      );
+    }
+    if (s2.aucLearned !== null) {
+      parts.push(
+        `Applied jobs outrank skipped ones ${percent(s2.aucLearned)} of the time` +
+          (s2.interval ? ` (95% range ${percent(s2.interval.low)}–${percent(s2.interval.high)})` : "") +
+          (s2.aucBaseline !== null ? `, without learning ${percent(s2.aucBaseline)}` : ""),
+      );
+      if (s2.interval && s2.interval.low <= 0.5) {
+        parts.push("too early to call that an improvement.");
+      }
+    } else {
+      parts.push("Scored both ways, but not enough labelled pairs to compare yet.");
+    }
+    $("learningComparison").textContent = parts.join(" — ");
+  } else {
+    $("learningComparison").textContent = "";
+  }
+
+  const box = $("constraints");
+  box.textContent = "";
+
+  const save = async (id, status) => {
+    await fetch("/api/learning/constraint", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
+    loadLearning();
+  };
+
+  for (const c of proposed) {
+    const row = el("div", "constraint");
+    const text = el("div", "constraint-text");
+    text.appendChild(el("div", "", c.text));
+    text.appendChild(el("div", "constraint-note", `your note: \u201c${c.note}\u201d`));
+    row.appendChild(text);
+
+    for (const [status, label] of [["confirmed", "Keep"], ["rejected", "Ignore"]]) {
+      const button = el("button", "ghost", label);
+      button.addEventListener("click", () => save(c.id, status));
+      row.appendChild(button);
+    }
+    box.appendChild(row);
+  }
+
+  // Confirmed constraints change how jobs are scored, so they stay visible and
+  // removable — a wrong inference must never be permanent.
+  for (const c of confirmed) {
+    const row = el("div", "constraint");
+    const text = el("div", "constraint-text");
+    text.appendChild(el("div", "", c.text));
+    text.appendChild(el("div", "constraint-note", `your note: \u201c${c.note}\u201d`));
+    row.appendChild(text);
+
+    const remove = el("button", "ghost", "Remove");
+    remove.addEventListener("click", () => save(c.id, "rejected"));
+    row.appendChild(remove);
+    box.appendChild(row);
+  }
 }
 
 $("refresh").addEventListener("click", loadJobs);

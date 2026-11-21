@@ -10,6 +10,10 @@ import {
   countScored,
   findJobByPrefix,
   listBoards,
+  listConstraints,
+  proposeConstraints,
+  setConstraintStatus,
+  shadowPairs,
   upsertBoards,
   getJob,
   isStage,
@@ -26,6 +30,10 @@ import { FIELDS, loadMarket, loadProfile, loadTracks } from "../engine/config.ts
 import { detect } from "../engine/discover.ts";
 import { searchConfigured } from "../engine/discovery.ts";
 import { provider } from "../engine/score/llm.ts";
+import { buildLearning } from "../engine/learn.ts";
+import { classifyNote, describeConstraint } from "../engine/notes.ts";
+import type { ConstraintKind } from "../engine/notes.ts";
+import { shadowStats } from "../engine/report.ts";
 import { configDir, env, fail, loadEnv, log, ROOT, setConfigDir, templatesDir, today } from "../engine/util.ts";
 import { runsDir } from "../engine/audit.ts";
 import { extractProfile, readCv } from "../engine/profile/extract.ts";
@@ -399,8 +407,27 @@ export function startServer(options: ServerOptions = {}) {
           json(res, 404, { error: `no posting for id "${id}"` });
           return;
         }
-        recordDecision(db, job.id, label, body.note ? String(body.note) : undefined);
-        json(res, 200, { ok: true, job: { id: job.id, title: job.title, company: job.company } });
+        const note = body.note ? String(body.note).trim() : "";
+        recordDecision(db, job.id, label, note || undefined);
+
+        // A note may state a constraint. It is only ever proposed here.
+        const proposed = note
+          ? proposeConstraints(
+              db,
+              classifyNote(note).map((p) => ({
+                kind: p.kind,
+                value: p.value,
+                note,
+                jobId: job.id,
+              })),
+            )
+          : 0;
+
+        json(res, 200, {
+          ok: true,
+          job: { id: job.id, title: job.title, company: job.company },
+          proposed,
+        });
         return;
       }
 
@@ -436,6 +463,75 @@ export function startServer(options: ServerOptions = {}) {
         } catch (err) {
           json(res, 400, { error: (err as Error).message });
         }
+        return;
+      }
+
+      if (pathname === "/api/learning" && req.method === "GET") {
+        // Without a profile there are no preferences, but the labels and
+        // constraints are still worth showing.
+        let profile;
+        try {
+          profile = loadProfile();
+        } catch {
+          profile = undefined;
+        }
+        const learning = buildLearning(db, profile);
+
+        const pairs = shadowPairs(db);
+        const labels = listDecisions(db);
+        const compared = pairs.length
+          ? shadowStats(
+              pairs.map((p) => ({
+                ...p,
+                label: labels.find((l) => l.jobId === p.jobId)?.label,
+              })),
+            )
+          : undefined;
+
+        json(res, 200, {
+          applied: learning.applied,
+          skipped: learning.skipped,
+          enoughLabels: learning.enoughLabels,
+          tracks: learning.trackCalibration,
+          suggestedMinScore: learning.suggestedMinScore ?? null,
+          preferences: learning.preferences,
+          constraints: listConstraints(db).map((c) => ({
+            id: c.id,
+            kind: c.kind,
+            value: c.value ?? null,
+            note: c.note,
+            status: c.status,
+            text: describeConstraint(c.kind as ConstraintKind, c.value),
+          })),
+          shadow: compared
+            ? {
+                n: compared.n,
+                labelled: compared.labelled,
+                meanDelta: compared.meanDelta,
+                agreement: compared.agreement,
+                aucLearned: compared.aucLearned ?? null,
+                aucBaseline: compared.aucBaseline ?? null,
+                interval: compared.aucCi ?? null,
+                precision: compared.precision ?? null,
+              }
+            : null,
+        });
+        return;
+      }
+
+      if (pathname === "/api/learning/constraint" && req.method === "POST") {
+        const body = await readJsonBody(req);
+        const id = String(body.id ?? "");
+        const status = String(body.status ?? "");
+        if (status !== "confirmed" && status !== "rejected") {
+          json(res, 400, { error: "status must be confirmed or rejected" });
+          return;
+        }
+        if (!setConstraintStatus(db, id, status)) {
+          json(res, 404, { error: `no constraint "${id}"` });
+          return;
+        }
+        json(res, 200, { ok: true });
         return;
       }
 

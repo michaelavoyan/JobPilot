@@ -4,12 +4,15 @@ import {
   getJob,
   isStage,
   listBoards,
+  listConstraints,
   open,
+  proposeConstraints,
   recordDecision,
+  setConstraintStatus,
   STAGES,
   upsertBoards,
 } from "./storage/db.ts";
-import { loadMarket, loadTracks } from "./engine/config.ts";
+import { loadMarket, loadProfile, loadTracks } from "./engine/config.ts";
 import { runAll, runCollect, runDigest, runScore } from "./engine/pipeline.ts";
 import { runEval, printStats, funnelLines } from "./engine/report.ts";
 import { detect } from "./engine/discover.ts";
@@ -25,6 +28,8 @@ import { renderProfileYaml, writeProfile } from "./engine/profile/write.ts";
 import { provider } from "./engine/score/llm.ts";
 import { writeRunReport } from "./engine/audit.ts";
 import { buildLearning } from "./engine/learn.ts";
+import { classifyNote, describeConstraint } from "./engine/notes.ts";
+import type { ConstraintKind } from "./engine/notes.ts";
 import {
   install as installSchedule,
   kickstart,
@@ -58,7 +63,10 @@ const HELP = `JobPilot — personal job-search agent
                                    add --rescore to re-evaluate everything
   npm run digest                   write the digest
   npm run run                      collect + score + digest
-  npm run learn                    calibration from your own applied/skipped labels
+  npm run learn                    calibration, preferences, proposed constraints
+  npm run learn -- --confirm <id>  accept a constraint; it reaches the scorer
+  npm run learn -- --reject <id>   discard it
+  npm run learn -- --reset         forget shadow scores and proposals; keep labels
   npm run feedback -- <id> <stage> shortlisted | applied | screening | interview
                                    | offer | rejected | skipped
   npm run funnel                   application funnel and conversion rates
@@ -347,8 +355,27 @@ async function main(): Promise<void> {
       const db = open();
       const job = getJob(db, idOrPrefix) ?? findJobByPrefix(db, idOrPrefix);
       if (!job) fail(`no posting found for id/prefix "${idOrPrefix}"`);
-      recordDecision(db, job.id, label, note.join(" ") || undefined);
+      const text = note.join(" ").trim();
+      recordDecision(db, job.id, label, text || undefined);
       log(`${label}: ${job.company} — ${job.title}  (${job.id})`);
+
+      if (text) {
+        const proposals = classifyNote(text);
+        if (!proposals.length) {
+          log(`note kept, but nothing in it maps to a constraint yet`);
+        } else {
+          const added = proposeConstraints(
+            db,
+            proposals.map((p) => ({ kind: p.kind, value: p.value, note: text, jobId: job.id })),
+          );
+          if (added) {
+            log(`${added} constraint(s) proposed — review them: npm run learn`);
+            log("nothing changes until you confirm");
+          } else {
+            log("that constraint was already known");
+          }
+        }
+      }
       return;
     }
 
@@ -356,13 +383,38 @@ async function main(): Promise<void> {
       const db = open();
 
       if (args.includes("--reset")) {
-        const removed = db.prepare("DELETE FROM shadow_scores").run();
-        log(`forgot ${removed.changes} shadow score(s); your labels are untouched`);
+        const shadow = db.prepare("DELETE FROM shadow_scores").run();
+        // Proposals are derived from notes; confirmed ones are the user's own
+        // statements and survive. Labels always survive.
+        const proposedRows = db
+          .prepare("DELETE FROM learning_constraints WHERE status = 'proposed'")
+          .run();
+        log(
+          `forgot ${shadow.changes} shadow score(s) and ${proposedRows.changes} unconfirmed ` +
+            `constraint(s); your labels and confirmed constraints are untouched`,
+        );
         return;
       }
 
-      const learning = buildLearning(db);
-      if (!learning.applied && !learning.skipped) {
+      if (args.includes("--confirm") || args.includes("--reject")) {
+        const status = args.includes("--confirm") ? "confirmed" : "rejected";
+        const id = args.find((a) => !a.startsWith("--"));
+        const flag = status === "confirmed" ? "confirm" : "reject";
+        if (!id) fail(`usage: npm run learn -- --${flag} <constraint-id>`);
+        if (!setConstraintStatus(db, id, status)) fail(`no constraint "${id}"`);
+        log(`${status}: ${id}`);
+        return;
+      }
+
+      let profile;
+      try {
+        profile = loadProfile();
+      } catch {
+        profile = undefined;
+      }
+      const learning = buildLearning(db, profile);
+      const proposed = listConstraints(db, "proposed");
+      if (!learning.applied && !learning.skipped && !proposed.length) {
         log("no labels yet. Label a few postings: npm run feedback -- <id> applied");
         return;
       }
@@ -381,6 +433,25 @@ async function main(): Promise<void> {
       } else {
         log("\nnot enough separation yet to suggest a threshold");
         log("the labels are already fed to the scorer as calibration evidence");
+      }
+
+      if (learning.preferences.length) {
+        log("\nwhat your applications have in common:");
+        for (const p of learning.preferences) {
+          log(
+            `  ${p.term} — ${p.applied} of ${p.applied + p.skipped} postings mentioning it were applied to ` +
+              `(${Math.round(p.baselineRate * 100)}% overall)`,
+          );
+        }
+      }
+
+      if (proposed.length) {
+        log("\nconstraints proposed from your notes — none applied yet:");
+        for (const c of proposed) {
+          log(`  ${c.id}  ${describeConstraint(c.kind as ConstraintKind, c.value)}  \"${c.note}\"`);
+        }
+        log("confirm with: npm run learn -- --confirm <id>");
+        log("ignore with:  npm run learn -- --reject <id>");
       }
       return;
     }

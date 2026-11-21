@@ -176,3 +176,21 @@ a.ghost { color: var(--text); border: 1px solid var(--border); border-radius: 8p
 }
 .hidden-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hidden-row button { padding: 3px 10px; font-size: 12px; }
+
+.learning { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 14px; }
+.learning h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; }
+.learning .note { margin: 0 0 6px; }
+.constraint {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 9px 12px; margin-top: 8px; font-size: 13px;
+}
+.constraint-text { flex: 1; min-width: 180px; }
+.constraint-note { color: var(--muted); font-size: 12px; }
+.constraint button { font-size: 12px; padding: 4px 10px; }
+.threshold-button { font-size: 12px; padding: 3px 9px; margin-left: 6px; }
+.toast > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast-note {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text); font: inherit; font-size: 12.5px; padding: 5px 9px; width: 210px;
+}
