@@ -454,7 +454,8 @@ function renderJob(job) {
   if (job.reasons?.length) card.appendChild(el("div", "reasons", job.reasons.join(" · ")));
   if (job.flags?.length) {
     const flags = el("div", "flags");
-    for (const f of job.flags) flags.appendChild(el("span", "flag", f));
+    // Flags arrive as machine tokens; the page shows words.
+    for (const f of job.flags) flags.appendChild(el("span", "flag", f.replace(/_/g, " ")));
     card.appendChild(flags);
   }
 

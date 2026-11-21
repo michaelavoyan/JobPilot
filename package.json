@@ -27,7 +27,8 @@
     "schedule": "node src/cli.ts schedule",
     "test": "npm run typecheck && node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "learn": "node src/cli.ts learn"
+    "learn": "node src/cli.ts learn",
+    "screenshot": "node scripts/screenshot.ts"
   },
   "dependencies": {
     "fflate": "^0.8.3",
@@ -37,6 +38,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "jsdom": "^31.0.1",
+    "playwright": "^1.65.1",
     "typescript": "^7.0.2"
   },
   "license": "MIT",
