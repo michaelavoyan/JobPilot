@@ -1,6 +1,6 @@
 {
   "name": "jobpilot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "JobPilot \u2014 personal job-search agent: ingest postings, filter, score against a profile, emit a digest.",
