@@ -264,7 +264,9 @@ async function main(): Promise<void> {
 
     case "run": {
       const db = open();
-      if (!env("ANTHROPIC_API_KEY") && !env("OPENAI_API_KEY")) {
+      // Any supported provider counts. Naming two of the four made every
+      // OpenCode and DeepSeek install log a false warning, every day.
+      if (!provider()) {
         warn("no LLM key set — collecting and storing only, nothing will be scored.");
       }
       try {
