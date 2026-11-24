@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { configDir, setConfigDir } from "../src/engine/util.ts";
 import { open, saveScores, stats, upsertBoards, upsertJobs, listBoards } from "../src/storage/db.ts";
 import { runAll, runCollect, runDigest, runScore } from "../src/engine/pipeline.ts";
+import { LEARNING_VERSION } from "../src/engine/learn.ts";
 import type { Job } from "../src/engine/types.ts";
 
 /** A config directory whose sources are all disabled, so nothing hits the network. */
@@ -218,4 +219,237 @@ test("a full run collects, scores and digests in order", async () => {
   const st = stats(db);
   assert.equal(st.jobs, 1, "the collected posting is stored");
   assert.equal(st.scored, 1);
+});
+
+async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
+  const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  for (const [k, v] of Object.entries(vars)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+test("learned scores carry their rule version and a record of what was shown", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertJobs(db, [job("a", "Engineering Manager")]);
+
+  await withConfig(dir, async () =>
+    runScore(db, {}, {
+      provider: () => "opencode",
+      scoreJobs: async (requests) => ({
+        ...outcome(requests.map((r) => ({ jobId: r.job.id, score: 80 }))),
+        learnedJobIds: new Set(requests.map((r) => r.job.id)),
+      }),
+    }),
+  );
+
+  const row = db.prepare("SELECT variant, learning_version FROM scores").get() as {
+    variant: string;
+    learning_version: string;
+  };
+  assert.equal(row.variant, "learned");
+  assert.equal(row.learning_version, LEARNING_VERSION);
+
+  const runs = db.prepare("SELECT COUNT(*) AS n FROM learning_runs").get() as { n: number };
+  assert.equal(runs.n, 1, "the block that reached the model is recorded");
+});
+
+test("without learned evidence the score is baseline and no run is recorded", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertJobs(db, [job("a", "Engineering Manager")]);
+
+  await withConfig(dir, async () =>
+    runScore(db, {}, {
+      provider: () => "opencode",
+      scoreJobs: async (requests) => outcome(requests.map((r) => ({ jobId: r.job.id, score: 80 }))),
+    }),
+  );
+
+  const row = db.prepare("SELECT variant, learning_version FROM scores").get() as {
+    variant: string;
+    learning_version: string | null;
+  };
+  assert.equal(row.variant, "baseline");
+  assert.equal(row.learning_version, null);
+  const runs = db.prepare("SELECT COUNT(*) AS n FROM learning_runs").get() as { n: number };
+  assert.equal(runs.n, 0);
+});
+
+test("shadow scoring saves a baseline twin for the learned postings only", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertJobs(db, [job("a", "Engineering Manager")]);
+
+  const calls: { learning: unknown }[] = [];
+  await withEnv({ LEARNING_SHADOW: "10" }, () =>
+    withConfig(dir, async () =>
+      runScore(db, {}, {
+        provider: () => "opencode",
+        scoreJobs: async (requests, _tracks, _profile, options) => {
+          calls.push({ learning: options.learning });
+          return {
+            ...outcome(requests.map((r) => ({ jobId: r.job.id, score: 80 }))),
+            learnedJobIds: new Set(requests.map((r) => r.job.id)),
+          };
+        },
+      }),
+    ),
+  );
+
+  assert.equal(calls.length, 2, "one learned pass and one baseline pass");
+  assert.equal(calls[1].learning, undefined, "the twin is scored without learning");
+
+  const twins = db.prepare("SELECT COUNT(*) AS n FROM shadow_scores").get() as { n: number };
+  assert.equal(twins.n, 1);
+});
+
+test("nothing learned means no shadow twin is paid for", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertJobs(db, [job("a", "Engineering Manager")]);
+
+  let calls = 0;
+  await withEnv({ LEARNING_SHADOW: "10" }, () =>
+    withConfig(dir, async () =>
+      runScore(db, {}, {
+        provider: () => "opencode",
+        scoreJobs: async (requests) => {
+          calls++;
+          return outcome(requests.map((r) => ({ jobId: r.job.id, score: 80 })));
+        },
+      }),
+    ),
+  );
+
+  assert.equal(calls, 1);
+  const twins = db.prepare("SELECT COUNT(*) AS n FROM shadow_scores").get() as { n: number };
+  assert.equal(twins.n, 0);
+});
+
+test("two samples are averaged before a score is stored", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertJobs(db, [job("a", "Engineering Manager")]);
+
+  let call = 0;
+  const seen: number[] = [];
+  await withEnv({ SCORE_SAMPLES: "2" }, () =>
+    withConfig(dir, async () =>
+      runScore(db, {}, {
+        provider: () => "opencode",
+        scoreJobs: async (requests) => {
+          call++;
+          const value = call === 1 ? 80 : 60;
+          seen.push(value);
+          return outcome(requests.map((r) => ({ jobId: r.job.id, score: value })));
+        },
+      }),
+    ),
+  );
+
+  assert.deepEqual(seen, [80, 60], "the run really asked twice");
+  const row = db.prepare("SELECT score FROM scores").get() as { score: number };
+  assert.equal(row.score, 70, "the stored score is the average");
+});
+
+test("without a key the run filters and reports, but never calls the model", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertJobs(db, [job("a", "Engineering Manager")]);
+
+  let called = false;
+  const summary = await withConfig(dir, async () =>
+    runScore(db, {}, {
+      provider: () => null,
+      scoreJobs: async (requests) => {
+        called = true;
+        return outcome(requests.map((r) => ({ jobId: r.job.id, score: 80 })));
+      },
+    }),
+  );
+
+  assert.equal(called, false);
+  assert.equal(summary.eligible, 1, "the filters still did their work");
+  assert.equal(summary.scored, 0);
+});
+
+test("editing the profile invalidates stored scores instead of keeping them", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertJobs(db, [job("a", "Engineering Manager")]);
+
+  const run = () =>
+    runScore(db, {}, {
+      provider: () => "opencode",
+      scoreJobs: async (requests) => outcome(requests.map((r) => ({ jobId: r.job.id, score: 80 }))),
+    });
+
+  await withConfig(dir, run);
+  const first = db.prepare("SELECT profile_hash FROM scores").get() as { profile_hash: string };
+
+  // A different profile means a different hash: the scores were made against
+  // criteria that no longer exist.
+  writeFileSync(
+    join(dir, "profile.yaml"),
+    "name: Test\ncountry: IL\nstack: [Kotlin]\n" +
+      "experience: { total_years: 10, management_years: 3 }\n",
+    "utf8",
+  );
+  await withConfig(dir, run);
+
+  const second = db.prepare("SELECT profile_hash FROM scores").get() as { profile_hash: string };
+  assert.notEqual(second.profile_hash, first.profile_hash);
+  const rows = db.prepare("SELECT COUNT(*) AS n FROM scores").get() as { n: number };
+  assert.equal(rows.n, 1, "the old score is gone and the posting was scored again");
+});
+
+test("a run where nothing passes the filters stops before the model", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertJobs(db, [job("a", "Sales Manager")]);
+
+  let called = false;
+  const summary = await withConfig(dir, async () =>
+    runScore(db, {}, {
+      provider: () => "opencode",
+      scoreJobs: async (requests) => {
+        called = true;
+        return outcome([]);
+      },
+    }),
+  );
+
+  assert.equal(called, false);
+  assert.equal(summary.eligible, 0);
+  assert.equal(summary.scored, 0);
+});
+
+test("a failed run is recorded before the error is rethrown", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+
+  await assert.rejects(
+    () =>
+      withConfig(dir, async () =>
+        runAll(db, {
+          collect: async () => {
+            throw new Error("network down");
+          },
+        }),
+      ),
+    /network down/,
+  );
+
+  const row = db.prepare("SELECT errors FROM runs").get() as { errors: string };
+  assert.match(String(row.errors), /network down/, "the failure is visible in the run log");
 });
