@@ -28,6 +28,19 @@ CREATE TABLE IF NOT EXISTS jobs (
   evaluated        INTEGER NOT NULL DEFAULT 0
 );
 
+-- Append-only. The decisions table holds the current state; this holds what
+-- happened to it.
+-- Restoring a hidden posting clears the decision, and without this the fact
+-- that a choice was ever made disappeared with it.
+CREATE TABLE IF NOT EXISTS decision_log (
+  id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id TEXT NOT NULL,
+  label  TEXT,
+  note   TEXT,
+  action TEXT NOT NULL,
+  at     TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS scores (
   job_id       TEXT NOT NULL,
   track        TEXT NOT NULL,
@@ -697,6 +710,18 @@ export function isStage(value: string): value is Stage {
   return (STAGES as readonly string[]).includes(value);
 }
 
+export type DecisionAction = "set" | "cleared";
+
+function logDecision(
+  db: Db,
+  jobId: string,
+  entry: { label?: string; note?: string; action: DecisionAction },
+): void {
+  db.prepare(
+    "INSERT INTO decision_log (job_id, label, note, action, at) VALUES (?, ?, ?, ?, ?)",
+  ).run(jobId, entry.label ?? null, entry.note ?? null, entry.action, nowIso());
+}
+
 export function recordDecision(db: Db, jobId: string, label: string, note?: string): void {
   const now = nowIso();
   db.prepare(
@@ -705,6 +730,7 @@ export function recordDecision(db: Db, jobId: string, label: string, note?: stri
        note = COALESCE(excluded.note, decisions.note),
        updated_at = excluded.updated_at`,
   ).run(jobId, label, note ?? null, now, now);
+  logDecision(db, jobId, { label, note, action: "set" });
 }
 
 /** Counts per stage, in pipeline order, for the funnel report. */
@@ -718,8 +744,35 @@ export function funnelCounts(db: Db): { stage: string; n: number }[] {
 
 /** Forgets a decision so the posting can appear again. */
 export function clearDecision(db: Db, jobId: string): boolean {
+  const previous = db
+    .prepare("SELECT label, note FROM decisions WHERE job_id = ?")
+    .get(jobId) as Row | undefined;
   const result = db.prepare("DELETE FROM decisions WHERE job_id = ?").run(jobId);
+  if (!previous) return false;
+  logDecision(db, jobId, {
+    label: String(previous.label),
+    note: previous.note ? String(previous.note) : undefined,
+    action: "cleared",
+  });
   return Number(result.changes) > 0;
+}
+
+/** Every change ever made to a decision, newest first. */
+export function decisionHistory(
+  db: Db,
+  limit = 50,
+): { jobId: string; label?: string; note?: string; action: DecisionAction; at: string }[] {
+  return (
+    db
+      .prepare("SELECT * FROM decision_log ORDER BY at DESC, id DESC LIMIT ?")
+      .all(limit) as Row[]
+  ).map((r) => ({
+    jobId: String(r.job_id),
+    label: r.label ? String(r.label) : undefined,
+    note: r.note ? String(r.note) : undefined,
+    action: String(r.action) as DecisionAction,
+    at: String(r.at),
+  }));
 }
 
 /** Everything the user has labelled, newest first, for the manage list. */
