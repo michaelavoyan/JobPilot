@@ -24,3 +24,4 @@ usage in [`../README.md`](../README.md).
 | 17 | The local server refuses cross-origin requests | The page is bound to 127.0.0.1, but any website in the same browser could otherwise POST to it and start paid runs, rewrite the profile or label postings | A browser sandbox strong enough to make the check redundant |
 
 | 18 | A score is called learned only when its prompt carried learned evidence | A batch of a track with nothing learned about it gets an unchanged prompt; counting it as learned would dilute the comparison toward "no difference" | Per-batch provenance in the score rows themselves |
+| 19 | Undo clears a decision but never erases the record | Restoring a hidden posting used to delete the only evidence a choice was made; `decision_log` is append-only and metrics still read the current state | A decision model where an undone choice is genuinely uninteresting |
