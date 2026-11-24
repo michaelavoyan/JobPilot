@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configDir, setConfigDir } from "../src/engine/util.ts";
 import {
+  attemptedNames,
   listBoards,
   open,
   saveScores,
@@ -494,4 +495,82 @@ test("shadow scoring moves on to postings that have no twin yet", async () => {
   );
 
   assert.deepEqual(shadowed, ["b"], "the posting without a twin is chosen, not the first one");
+});
+
+test("a run can grow the directory before collecting", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertBoards(db, [{ ats: "greenhouse", ident: "old", name: "Old Co" }]);
+
+  let skipSeen: Set<string> | undefined;
+  const summary = await withEnv({ DISCOVER_ON_RUN: "1", DISCOVER_LIMIT: "5" }, () =>
+    withConfig(dir, async () =>
+      runAll(db, {
+        discoverFromList: async (options) => {
+          skipSeen = options?.skip;
+          return {
+            names: 2,
+            probed: 2,
+            hits: [
+              { name: "New Co", source: "greenhouse", ident: "newco", openRoles: 3 },
+              { name: "Ghost Co", source: "ashby", ident: "ghostco", openRoles: 1 },
+            ],
+            checked: ["New Co", "Ghost Co"],
+            errors: [],
+          };
+        },
+        collect: async () => ({ jobs: [], errors: [], perSource: {} }),
+        writeDigest: () => "out/digest.md",
+        pushTelegram: async () => false,
+      }),
+    ),
+  );
+
+  const names = listBoards(db).map((b) => b.name).sort();
+  assert.deepEqual(names, ["Ghost Co", "New Co", "Old Co"]);
+  assert.equal(summary.collected, 0);
+  assert.ok(skipSeen?.has("oldco"), "known companies are not probed again");
+  assert.deepEqual([...attemptedNames(db)].sort(), ["Ghost Co", "New Co"]);
+});
+
+test("a second run does not probe the same companies again", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+
+  const run = () =>
+    withEnv({ DISCOVER_ON_RUN: "1" }, () =>
+      withConfig(dir, async () =>
+        runAll(db, {
+          discoverFromList: async () => ({
+            names: 1,
+            probed: 1,
+            hits: [{ name: "Probed Co", source: "greenhouse", ident: "probedco", openRoles: 1 }],
+            checked: ["Probed Co"],
+            errors: [],
+          }),
+          collect: async () => ({ jobs: [], errors: [], perSource: {} }),
+          writeDigest: () => "out/digest.md",
+          pushTelegram: async () => false,
+        }),
+      ),
+    );
+
+  await run();
+
+  let skipSeen: Set<string> | undefined;
+  await withEnv({ DISCOVER_ON_RUN: "1" }, () =>
+    withConfig(dir, async () =>
+      runAll(db, {
+        discoverFromList: async (options) => {
+          skipSeen = options?.skip;
+          return { names: 0, probed: 0, hits: [], checked: [], errors: [] };
+        },
+        collect: async () => ({ jobs: [], errors: [], perSource: {} }),
+        writeDigest: () => "out/digest.md",
+        pushTelegram: async () => false,
+      }),
+    ),
+  );
+
+  assert.ok(skipSeen?.has("probedco"), "a name probed once is not probed daily");
 });

@@ -27,6 +27,8 @@ export interface ListDiscovery {
   names: number;
   probed: number;
   hits: BoardHit[];
+  /** The names actually probed, so the caller can remember them. */
+  checked: string[];
   errors: { name: string; message: string }[];
 }
 
@@ -146,6 +148,8 @@ async function probe(name: string, fetchFn: Fetcher): Promise<BoardHit | null> {
 export interface ListOptions {
   /** Company names already in the directory; they are not probed again. */
   known?: Set<string>;
+  /** Names probed on an earlier run and found to have no board. */
+  skip?: Set<string>;
   limit?: number;
   concurrency?: number;
   fetchFn?: Fetcher;
@@ -177,7 +181,9 @@ export async function discoverFromList(options: ListOptions = {}): Promise<ListD
   }
 
   const limit = Math.max(1, options.limit ?? 120);
-  const targets = names.filter((name) => !options.known?.has(norm(name))).slice(0, limit);
+  const targets = names
+    .filter((name) => !options.known?.has(norm(name)) && !options.skip?.has(norm(name)))
+    .slice(0, limit);
   const hits: BoardHit[] = [];
 
   for (let i = 0; i < targets.length; i += concurrency) {
@@ -195,5 +201,5 @@ export async function discoverFromList(options: ListOptions = {}): Promise<ListD
     for (const hit of results) if (hit) hits.push(hit);
   }
 
-  return { names: names.length, probed: targets.length, hits, errors };
+  return { names: names.length, probed: targets.length, hits, checked: targets, errors };
 }

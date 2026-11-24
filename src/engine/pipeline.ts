@@ -6,6 +6,8 @@ import {
   markEvaluated,
   recordRejects,
   recordLearningRun,
+  attemptedNames,
+  recordAttempts,
   saveScores,
   saveShadowScores,
   shadowedJobIds,
@@ -13,6 +15,7 @@ import {
   stats,
   topScored,
   unscoredJobs,
+  upsertBoards,
   upsertJobs,
 } from "../storage/db.ts";
 import { loadMarket, loadProfile, loadTracks, profileHash } from "./config.ts";
@@ -23,6 +26,7 @@ import { combineScoreOutcomes } from "./score/merge.ts";
 import { scoreJobs } from "./score/rerank.ts";
 import type { ScoreRequest } from "./score/rerank.ts";
 import { provider } from "./score/llm.ts";
+import { discoverFromList } from "./discover-list.ts";
 import { buildLearning, hasLearning, LEARNING_VERSION, renderLearning } from "./learn.ts";
 import { renderDigest, writeDigest } from "./deliver/digest.ts";
 import { pushTelegram } from "./deliver/telegram.ts";
@@ -45,6 +49,7 @@ export interface PipelineDeps {
   renderDigest: typeof renderDigest;
   writeDigest: typeof writeDigest;
   pushTelegram: typeof pushTelegram;
+  discoverFromList: typeof discoverFromList;
 }
 
 const realDeps: PipelineDeps = {
@@ -58,6 +63,7 @@ const realDeps: PipelineDeps = {
   renderDigest,
   writeDigest,
   pushTelegram,
+  discoverFromList,
 };
 
 const withDeps = (overrides?: Partial<PipelineDeps>): PipelineDeps => ({
@@ -386,6 +392,33 @@ export async function runAll(
   let digestPath: string | undefined;
 
   try {
+    // Optional: grow the directory before collecting, so a new board is used
+    // in the same run. Names probed before are skipped, so this is a one-off
+    // cost rather than a daily sweep of every company ever seen.
+    if (numEnv("DISCOVER_ON_RUN", 0) > 0) {
+      const boards = listBoards(db, false);
+      const normName = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const skip = new Set([
+        ...boards.map((b) => normName(b.name)),
+        ...[...attemptedNames(db)].map(normName),
+      ]);
+      const found = await d.discoverFromList({
+        limit: numEnv("DISCOVER_LIMIT", 40),
+        skip,
+      });
+      const fresh = found.hits.filter(
+        (h) => !boards.some((b) => b.ats === h.source && b.ident === h.ident),
+      );
+      if (fresh.length) {
+        upsertBoards(
+          db,
+          fresh.map((h) => ({ ats: h.source, ident: h.ident, name: h.name })),
+        );
+      }
+      recordAttempts(db, found.checked);
+      log(`discovery: ${found.probed} company(ies) checked · ${fresh.length} new board(s)`);
+    }
+
     const c = await runCollect(db, d);
     collected = c.fetched;
     inserted = c.inserted;
