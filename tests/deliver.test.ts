@@ -106,3 +106,21 @@ test("machine flags are shown as words", () => {
   assert.match(md, /aws infra gap/);
   assert.doesNotMatch(md, /org_size_unclear/);
 });
+
+test("the location is shown once, not once per spelling", () => {
+  const md = renderDigest(
+    [
+      scored({
+        locations: [
+          "Tel Aviv-Yafo, Gush Dan, Israel",
+          "Tel Aviv, Israel - HQ",
+          "Tel Aviv-Yafo",
+        ],
+      }),
+    ],
+    tracks,
+    { minScore: 65, maxRows: 15 },
+  );
+  assert.equal((md.match(/Tel Aviv-Yafo, Gush Dan/g) ?? []).length, 1);
+  assert.doesNotMatch(md, /Israel - HQ/, "the other spellings are dropped");
+});
