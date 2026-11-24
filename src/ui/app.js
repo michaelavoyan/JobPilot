@@ -466,7 +466,8 @@ function renderJob(job) {
 
   const head = el("div");
   head.appendChild(el("div", "job-title", job.title));
-  const where = job.remote ? "Remote" : (job.locations || []).join(", ") || "location n/a";
+  // The feed often repeats one city in several spellings.
+  const where = job.remote ? "Remote" : [...new Set(job.locations || [])].join(", ") || "location n/a";
   head.appendChild(el("div", "job-meta", `${job.company} · ${where}`));
   top.appendChild(head);
   card.appendChild(top);

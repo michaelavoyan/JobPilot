@@ -79,11 +79,12 @@ function trackFor(job: ScoredJob, tracks: Track[]): string | undefined {
 }
 
 function renderRow(job: ScoredJob): string {
-  const where = job.remote ? "Remote" : job.locations.join(", ") || "location n/a";
+  // ATS feeds repeat the same city in several spellings; a digest shows one.
+  const where = job.remote ? "Remote" : (job.locations[0] ?? "") || "location n/a";
   const comp = formatComp(job.comp);
   const meta = [where, comp, job.lang !== "en" ? `lang:${job.lang}` : ""].filter(Boolean).join(" · ");
 
-  const header = `### ${job.score} · ${job.company} · ${job.title} — ${where}`;
+  const header = `### ${job.score} · ${job.company} · ${job.title}`;
   const reason = job.reasons.length ? job.reasons.join(" · ") : "no reasons returned";
   const flags = job.flags.length
     ? `\n\`${job.flags.map(readableFlag).join("` `")}\``
