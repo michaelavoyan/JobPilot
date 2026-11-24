@@ -28,6 +28,42 @@ import { pushTelegram } from "./deliver/telegram.ts";
 import { numEnv, log, nowIso, warn } from "./util.ts";
 import type { SourceError } from "./types.ts";
 
+/**
+ * The seams the run path is built from. Production passes nothing and gets the
+ * real implementations; tests pass stubs, which is why this file can now be
+ * exercised without a network, a model key or a real market.
+ */
+export interface PipelineDeps {
+  collect: typeof collect;
+  scoreJobs: typeof scoreJobs;
+  provider: typeof provider;
+  hardFilter: typeof hardFilter;
+  loadMarket: typeof loadMarket;
+  loadProfile: typeof loadProfile;
+  loadTracks: typeof loadTracks;
+  renderDigest: typeof renderDigest;
+  writeDigest: typeof writeDigest;
+  pushTelegram: typeof pushTelegram;
+}
+
+const realDeps: PipelineDeps = {
+  collect,
+  scoreJobs,
+  provider,
+  hardFilter,
+  loadMarket,
+  loadProfile,
+  loadTracks,
+  renderDigest,
+  writeDigest,
+  pushTelegram,
+};
+
+const withDeps = (overrides?: Partial<PipelineDeps>): PipelineDeps => ({
+  ...realDeps,
+  ...overrides,
+});
+
 export interface CollectSummary {
   fetched: number;
   inserted: number;
@@ -37,8 +73,12 @@ export interface CollectSummary {
   perSource: Record<string, number>;
 }
 
-export async function runCollect(db: Db): Promise<CollectSummary> {
-  const market = loadMarket();
+export async function runCollect(
+  db: Db,
+  deps: Partial<PipelineDeps> = {},
+): Promise<CollectSummary> {
+  const d = withDeps(deps);
+  const market = d.loadMarket();
 
   // The tenant directory is the only source: filled by discovery, never edited
   // by hand.
@@ -49,7 +89,7 @@ export async function runCollect(db: Db): Promise<CollectSummary> {
     warn('Run: npm run discover-web -- --bands "1-20"');
   }
 
-  const { jobs, errors, perSource } = await collect(companies, market, db);
+  const { jobs, errors, perSource } = await d.collect(companies, market, db);
   const { inserted, updated, rescored } = upsertJobs(db, jobs);
 
   log(`collected ${jobs.length} postings from ${Object.keys(perSource).length} source(s)`);
@@ -77,9 +117,14 @@ export interface ScoreSummary {
   rejectReasons: Record<string, number>;
 }
 
-export async function runScore(db: Db, options: { rescore?: boolean } = {}): Promise<ScoreSummary> {
-  const profile = loadProfile();
-  const tracks = loadTracks().filter((t) => t.enabled);
+export async function runScore(
+  db: Db,
+  options: { rescore?: boolean } = {},
+  deps: Partial<PipelineDeps> = {},
+): Promise<ScoreSummary> {
+  const d = withDeps(deps);
+  const profile = d.loadProfile();
+  const tracks = d.loadTracks().filter((t) => t.enabled);
   const pHash = profileHash(profile, tracks);
 
   // Editing profile.yaml or tracks.yaml invalidates stored scores by design.
@@ -115,12 +160,12 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
   const requests: ScoreRequest[] = [];
   const rejects: { jobId: string; track: string; reason: string }[] = [];
   const staleTracks: { jobId: string; track: string }[] = [];
-  const market = loadMarket();
+  const market = d.loadMarket();
 
   for (const job of jobs) {
     const eligibleFor: string[] = [];
     for (const track of tracks) {
-      const verdict = hardFilter(job, track, profile, market);
+      const verdict = d.hardFilter(job, track, profile, market);
       if (verdict.ok) {
         eligibleFor.push(track.key);
       } else {
@@ -153,7 +198,7 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
 
   if (!requests.length) return summary;
 
-  if (!provider()) {
+  if (!d.provider()) {
     warn("no LLM key configured — filtering only, nothing scored.");
     warn("set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env");
     return summary;
@@ -187,10 +232,10 @@ export async function runScore(db: Db, options: { rescore?: boolean } = {}): Pro
     reqs: typeof requests,
     opts: Parameters<typeof scoreJobs>[3],
   ) => {
-    if (samples === 1) return scoreJobs(reqs, tracks, profile, opts);
+    if (samples === 1) return d.scoreJobs(reqs, tracks, profile, opts);
     const runs = [];
     for (let i = 0; i < samples; i++) {
-      runs.push(await scoreJobs(reqs, tracks, profile, opts));
+      runs.push(await d.scoreJobs(reqs, tracks, profile, opts));
     }
     return combineScoreOutcomes(runs);
   };
@@ -287,15 +332,16 @@ export interface DigestSummary {
   pushed: boolean;
 }
 
-export async function runDigest(db: Db): Promise<DigestSummary> {
-  const tracks = loadTracks().filter((t) => t.enabled);
+export async function runDigest(db: Db, deps: Partial<PipelineDeps> = {}): Promise<DigestSummary> {
+  const d = withDeps(deps);
+  const tracks = d.loadTracks().filter((t) => t.enabled);
   const minScore = numEnv("MIN_SCORE", 65);
   const maxRows = numEnv("MAX_DIGEST_ROWS", 15);
 
   const jobs = topScored(db, minScore, 200);
-  const markdown = renderDigest(jobs, tracks, { minScore, maxRows });
-  const path = writeDigest(markdown);
-  const pushed = await pushTelegram(
+  const markdown = d.renderDigest(jobs, tracks, { minScore, maxRows });
+  const path = d.writeDigest(markdown);
+  const pushed = await d.pushTelegram(
     [...jobs].sort((a, b) => b.score - a.score).slice(0, 5),
     5,
   );
@@ -304,7 +350,10 @@ export async function runDigest(db: Db): Promise<DigestSummary> {
   return { matches: jobs.length, path, pushed };
 }
 
-export async function runAll(db: Db): Promise<{
+export async function runAll(
+  db: Db,
+  deps: Partial<PipelineDeps> = {},
+): Promise<{
   collected: number;
   inserted: number;
   evaluated: number;
@@ -314,6 +363,7 @@ export async function runAll(db: Db): Promise<{
   matches: number;
   digest?: string;
 }> {
+  const d = withDeps(deps);
   const runId = startRun(db);
   let collected = 0;
   let inserted = 0;
@@ -329,12 +379,12 @@ export async function runAll(db: Db): Promise<{
   let digestPath: string | undefined;
 
   try {
-    const c = await runCollect(db);
+    const c = await runCollect(db, d);
     collected = c.fetched;
     inserted = c.inserted;
     errors = c.errors;
 
-    const s = await runScore(db);
+    const s = await runScore(db, {}, d);
     filtered = s.evaluated - s.eligible;
     evaluated = s.evaluated;
     eligible = s.eligible;
@@ -343,7 +393,7 @@ export async function runAll(db: Db): Promise<{
     tokensOut = s.tokensOut;
     costUsd = s.costUsd;
 
-    const digest = await runDigest(db);
+    const digest = await runDigest(db, d);
     digestMatches = digest.matches;
     digestPath = digest.path;
 
