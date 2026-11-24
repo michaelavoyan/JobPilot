@@ -8,6 +8,7 @@ import {
   recordLearningRun,
   saveScores,
   saveShadowScores,
+  shadowedJobIds,
   startRun,
   stats,
   topScored,
@@ -248,9 +249,15 @@ export async function runScore(
   // really were scored with learning are worth a baseline twin.
   const shadowCount = outcome.learnedJobIds.size ? numEnv("LEARNING_SHADOW", 0) : 0;
   if (shadowCount > 0 && outcome.scores.length) {
-    const shadowRequests = requests
-      .filter((r) => outcome.learnedJobIds.has(r.job.id))
-      .slice(0, shadowCount);
+    // Prefer postings that have no baseline twin yet. Taking the first N every
+    // run would shadow the same ten forever, and the comparison needs twenty
+    // pairs before it may report an interval.
+    const alreadyShadowed = new Set(shadowedJobIds(db, LEARNING_VERSION));
+    const learnedRequests = requests.filter((r) => outcome.learnedJobIds.has(r.job.id));
+    const shadowRequests = [
+      ...learnedRequests.filter((r) => !alreadyShadowed.has(r.job.id)),
+      ...learnedRequests.filter((r) => alreadyShadowed.has(r.job.id)),
+    ].slice(0, shadowCount);
     if (shadowRequests.length) {
       const shadowOptions = {
         batchSize: numEnv("BATCH_SIZE", 6),
