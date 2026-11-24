@@ -26,12 +26,13 @@ No searching. No scrolling. No LinkedIn.
 
 ## It learns from your decisions
 
-Every job you mark **Applied** or **Skipped** feeds back into the scorer.
+Mark jobs **Applied** or **Skipped**, and the agent uses your decisions as
+calibration evidence: it works out where your bar actually sits and shows the
+model a few of your own postings as worked examples.
 
-The agent reads your decisions before each search: it works out where your bar
-actually sits, and shows the model a few of your own applied and skipped
-postings as worked examples. The more you label, the closer the scores get to
-your real judgement.
+It starts at **five applied and ten skipped**. Below that a handful of clicks is
+noise, so the scorer runs on your profile alone — `npm run learn` says how many
+more it needs. The more you label, the closer the scores get to your judgement.
 
 If you write a note when you skip something — "too far", "no more adtech" — the
 agent reads it and proposes a rule. Nothing changes until you confirm it, and

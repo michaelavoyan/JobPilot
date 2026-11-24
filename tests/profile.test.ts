@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -191,4 +192,16 @@ test("readCv rejects a file that is not a zip", async () => {
 
 test("unsupported formats name the supported ones", async () => {
   await assert.rejects(() => readCv("/tmp/cv.rtf"), /use \.pdf, \.docx or \.md/i);
+});
+
+test("a text PDF is parsed by the real parser", async () => {
+  const path = fileURLToPath(new URL("./fixtures/cv.pdf", import.meta.url));
+  const text = await readCv(path);
+  assert.match(text, /Jane Doe/);
+  assert.ok(text.length >= 200, "the fixture carries enough text to be a CV");
+});
+
+test("a PDF with no text layer is refused, not turned into an empty profile", async () => {
+  const path = fileURLToPath(new URL("./fixtures/scanned.pdf", import.meta.url));
+  await assert.rejects(() => readCv(path), /scanned PDF/);
 });
