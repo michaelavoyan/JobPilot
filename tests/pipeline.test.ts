@@ -4,7 +4,15 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configDir, setConfigDir } from "../src/engine/util.ts";
-import { open, saveScores, stats, upsertBoards, upsertJobs, listBoards } from "../src/storage/db.ts";
+import {
+  listBoards,
+  open,
+  saveScores,
+  saveShadowScores,
+  stats,
+  upsertBoards,
+  upsertJobs,
+} from "../src/storage/db.ts";
 import { runAll, runCollect, runDigest, runScore } from "../src/engine/pipeline.ts";
 import { LEARNING_VERSION } from "../src/engine/learn.ts";
 import type { Job } from "../src/engine/types.ts";
@@ -452,4 +460,38 @@ test("a failed run is recorded before the error is rethrown", async () => {
 
   const row = db.prepare("SELECT errors FROM runs").get() as { errors: string };
   assert.match(String(row.errors), /network down/, "the failure is visible in the run log");
+});
+
+test("shadow scoring moves on to postings that have no twin yet", async () => {
+  const dir = quietConfigDir();
+  const db = open(":memory:");
+  upsertJobs(db, [job("a", "Engineering Manager"), job("b", "Engineering Manager")]);
+
+  // "a" already has a baseline twin from an earlier run.
+  saveShadowScores(
+    db,
+    [{ jobId: "a", track: "b", score: 70, reasons: [], flags: [] }],
+    "stub",
+    LEARNING_VERSION,
+  );
+
+  const shadowed: string[] = [];
+  let call = 0;
+  await withEnv({ LEARNING_SHADOW: "1" }, () =>
+    withConfig(dir, async () =>
+      runScore(db, {}, {
+        provider: () => "opencode",
+        scoreJobs: async (requests, _tracks, _profile, options) => {
+          call++;
+          if (call === 2) shadowed.push(...requests.map((r) => r.job.id));
+          return {
+            ...outcome(requests.map((r) => ({ jobId: r.job.id, score: 80 }))),
+            learnedJobIds: new Set(requests.map((r) => r.job.id)),
+          };
+        },
+      }),
+    ),
+  );
+
+  assert.deepEqual(shadowed, ["b"], "the posting without a twin is chosen, not the first one");
 });

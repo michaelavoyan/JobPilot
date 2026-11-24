@@ -618,6 +618,13 @@ export function shadowPairs(
  * Pairs that exist but were produced under different learning rules. They are
  * not comparable, so they are counted rather than compared.
  */
+/** Postings that already have a baseline twin under these rules. */
+export function shadowedJobIds(db: Db, version: string): string[] {
+  return (
+    db.prepare("SELECT job_id FROM shadow_scores WHERE version = ?").all(version) as Row[]
+  ).map((r) => String(r.job_id));
+}
+
 export function staleShadowPairs(db: Db, version: string): number {
   const row = db
     .prepare(
