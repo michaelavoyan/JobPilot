@@ -588,3 +588,211 @@ test("a comma-separated phrase becomes several interest tags", async () => {
   ]);
   dom.window.close();
 });
+
+/* ---------- the learning section ---------- */
+
+type Fake = { ok: boolean; status?: number; json: () => Promise<unknown> };
+const ok = (body: unknown): Fake => ({ ok: true, json: async () => body });
+const failed = (status: number, body: unknown): Fake => ({
+  ok: false,
+  status,
+  json: async () => body,
+});
+
+const baseLearning = {
+  applied: 5,
+  skipped: 10,
+  enoughLabels: true,
+  tracks: [{ track: "b", applied: 5, skipped: 10, appliedMedian: 85, skippedMedian: 50 }],
+  suggestedMinScore: 68,
+  preferences: [],
+  constraints: [],
+  shadow: null,
+};
+
+/** A page whose server answers are chosen per test. */
+function bootWith(responder: (url: string) => Promise<Fake> | Fake) {
+  const dom = track(
+    new JSDOM(html, { url: "http://127.0.0.1:7788/", runScripts: "outside-only" }),
+  );
+  const calls: { url: string; body?: string }[] = [];
+  dom.window.fetch = (async (input: string, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, body: init?.body ? String(init.body) : undefined });
+    if (url.includes("/api/state")) return ok(baseState) as unknown as Response;
+    if (url.includes("/api/jobs")) return ok({ jobs, total: jobs.length }) as unknown as Response;
+    return (await responder(url)) as unknown as Response;
+  }) as typeof fetch;
+  dom.window.eval(script);
+  return { dom, calls };
+}
+
+test("the learning section stays hidden until there is something to say", async () => {
+  const { dom } = bootWith(() =>
+    ok({ applied: 0, skipped: 0, enoughLabels: false, tracks: [], preferences: [], constraints: [], shadow: null }),
+  );
+  await settle();
+  const section = dom.window.document.getElementById("learning") as HTMLElement;
+  assert.equal(section.hidden, true, "no decisions, no section");
+  dom.window.close();
+});
+
+test("with enough decisions it shows the counts, the bar and a way to adopt it", async () => {
+  const { dom, calls } = bootWith(() => ok(baseLearning));
+  await settle();
+
+  const section = dom.window.document.getElementById("learning") as HTMLElement;
+  assert.equal(section.hidden, false);
+
+  const summary = dom.window.document.getElementById("learningSummary")!.textContent ?? "";
+  assert.match(summary, /5 applied/);
+  assert.match(summary, /10 skipped/);
+
+  const evidence = dom.window.document.getElementById("learningEvidence")!;
+  assert.match(evidence.textContent ?? "", /around 85/);
+  assert.match(evidence.textContent ?? "", /bar at about 68/);
+
+  const use = [...evidence.querySelectorAll("button")].find((b) => /Use it/.test(b.textContent ?? ""));
+  assert.ok(use, "the suggested threshold is offered, not applied");
+  (use as HTMLButtonElement).click();
+  await settle();
+
+  assert.equal(
+    (dom.window.document.getElementById("filterMin") as HTMLInputElement).value,
+    "68",
+  );
+  assert.ok(
+    calls.some((c) => c.url.includes("/api/jobs?min=68")),
+    "adopting it reloads the list at that threshold",
+  );
+  dom.window.close();
+});
+
+test("below the sample gate it says so instead of inventing a bar", async () => {
+  const { dom } = bootWith(() =>
+    ok({ ...baseLearning, applied: 4, skipped: 5, enoughLabels: false, suggestedMinScore: null }),
+  );
+  await settle();
+
+  const evidence = dom.window.document.getElementById("learningEvidence")!.textContent ?? "";
+  assert.match(evidence, /Not enough decisions/);
+  assert.doesNotMatch(evidence, /around 85/, "four decisions are not a median worth showing");
+  assert.equal(
+    [...dom.window.document.querySelectorAll("#learningEvidence button")].length,
+    0,
+    "no threshold is offered either",
+  );
+  dom.window.close();
+});
+
+test("a comparison is only drawn when the sample supports it", async () => {
+  const { dom } = bootWith(() =>
+    ok({
+      ...baseLearning,
+      shadow: { n: 10, labelled: 4, meanDelta: 3.8, agreement: 0.6, needed: 20, solidAt: 50, comparison: null },
+    }),
+  );
+  await settle();
+  const text = dom.window.document.getElementById("learningComparison")!.textContent ?? "";
+  assert.match(text, /needs 20/);
+  assert.doesNotMatch(text, /outrank/, "no claim is made from four pairs");
+  dom.window.close();
+});
+
+test("a proposed constraint is confirmed through the page", async () => {
+  const { dom, calls } = bootWith((url) => {
+    if (url.includes("/api/learning/constraint")) return ok({ ok: true });
+    return ok({
+      ...baseLearning,
+      constraints: [
+        {
+          id: "domain_penalty:adtech",
+          kind: "domain_penalty",
+          value: "adtech",
+          note: "no more adtech",
+          status: "proposed",
+          text: "Down-weight roles in adtech",
+        },
+      ],
+    });
+  });
+  await settle();
+
+  const row = dom.window.document.querySelector(".constraint");
+  assert.ok(row, "the proposal is visible");
+  assert.match(row!.textContent ?? "", /adtech/);
+  assert.match(row!.textContent ?? "", /no more adtech/, "the user's own words");
+
+  const keep = [...row!.querySelectorAll("button")].find((b) => /Keep/.test(b.textContent ?? ""));
+  (keep as HTMLButtonElement).click();
+  await settle();
+
+  assert.ok(
+    calls.some(
+      (c) =>
+        c.url.includes("/api/learning/constraint") &&
+        c.body?.includes("domain_penalty:adtech") &&
+        c.body?.includes("confirmed"),
+    ),
+    "confirmation reaches the server",
+  );
+  dom.window.close();
+});
+
+test("a skipped job takes a note and sends it", async () => {
+  const { dom, calls } = bootWith(() => ok({ ok: true }));
+  await settle();
+
+  const skip = dom.window.document.querySelector(".job button.skipped") as HTMLButtonElement;
+  skip.click();
+  await settle();
+
+  const input = dom.window.document.querySelector(".toast-note") as HTMLInputElement;
+  assert.ok(input, "the reason is asked for at the moment it is known");
+  input.value = "no outsourcing";
+  const save = [...dom.window.document.querySelectorAll(".toast button")].find((b) =>
+    /Save note/.test(b.textContent ?? ""),
+  );
+  (save as HTMLButtonElement).click();
+  await settle();
+
+  assert.ok(
+    calls.some(
+      (c) => c.url.includes("/api/feedback") && c.body?.includes("no outsourcing"),
+    ),
+    "the note is stored with the decision",
+  );
+  dom.window.close();
+});
+
+test("a dead server is reported instead of an empty list", async () => {
+  const dom = track(
+    new JSDOM(html, { url: "http://127.0.0.1:7788/", runScripts: "outside-only" }),
+  );
+  dom.window.fetch = (async (input: string) => {
+    if (String(input).includes("/api/jobs")) throw new Error("offline");
+    return { ok: true, json: async () => ({ ...baseState, jobs, total: 1 }) } as unknown as Response;
+  }) as typeof fetch;
+  dom.window.eval(script);
+  await settle();
+
+  const hint = dom.window.document.getElementById("resultsHint")!.textContent ?? "";
+  assert.match(hint, /Could not reach the server/);
+  dom.window.close();
+});
+
+test("a decision that is not saved says so", async () => {
+  const { dom } = bootWith((url) =>
+    url.includes("/api/feedback") ? failed(500, { error: "no" }) : ok({ ok: true }),
+  );
+  await settle();
+
+  const applied = dom.window.document.querySelector(".job button.applied") as HTMLButtonElement;
+  applied.click();
+  await settle();
+
+  const toast = dom.window.document.querySelector(".toast.notice-only");
+  assert.ok(toast, "silence would look like success");
+  assert.match(toast!.textContent ?? "", /Could not save/);
+  dom.window.close();
+});
