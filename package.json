@@ -29,7 +29,9 @@
     "typecheck": "tsc --noEmit",
     "learn": "node src/cli.ts learn",
     "screenshot": "node scripts/screenshot.ts",
-    "discover-list": "node src/cli.ts discover-list"
+    "discover-list": "node src/cli.ts discover-list",
+    "health": "node src/cli.ts health",
+    "backup": "node src/cli.ts backup"
   },
   "dependencies": {
     "fflate": "^0.8.3",

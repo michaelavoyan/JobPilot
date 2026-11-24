@@ -4,7 +4,8 @@
 
 ---
 
-JobPilot reads your CV, looks at every job open in your country, and hands you a short list.
+JobPilot reads your CV, looks at every job open at the companies in its board
+directory, and hands you a short list.
 
 Each one is scored, explained in a sentence, and ready to apply to.
 

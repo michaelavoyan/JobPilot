@@ -7,6 +7,8 @@ import {
   attemptedNames,
   listBoards,
   listConstraints,
+  runHistory,
+  stats,
   open,
   proposeConstraints,
   recordAttempts,
@@ -16,6 +18,7 @@ import {
   upsertBoards,
 } from "./storage/db.ts";
 import { loadMarket, loadProfile, loadTracks } from "./engine/config.ts";
+import { backupDatabase, listBackups } from "./storage/backup.ts";
 import { runAll, runCollect, runDigest, runScore } from "./engine/pipeline.ts";
 import { runEval, printStats, funnelLines } from "./engine/report.ts";
 import { detect } from "./engine/discover.ts";
@@ -25,8 +28,7 @@ import { boardToCompany, discoverCompanies, parseBands, searchConfigured } from 
 import { collect, SOURCES } from "./engine/ingest/index.ts";
 import { apiUrl, getJson } from "./engine/ingest/types.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
-import { basename } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { readCv, extractProfile } from "./engine/profile/extract.ts";
 import { renderProfileYaml, writeProfile } from "./engine/profile/write.ts";
 import { provider } from "./engine/score/llm.ts";
@@ -46,6 +48,7 @@ import {
   fail,
   loadEnv,
   log,
+  notify,
   setConfigDir,
   templatesDir,
   today,
@@ -78,6 +81,8 @@ const HELP = `JobPilot — personal job-search agent
   npm run eval                     ranking quality and filter health
   npm run stats                    database summary
   npm run schedule -- install      install the daily launchd agent
+  npm run health                   scheduler, last run, backups, directory size
+  npm run backup                   write a consistent snapshot of the database
   npm run ui                       start the web UI (or ./start.sh)
 
   Every command accepts --config <dir> (or JOBCONFIG_DIR).
@@ -276,7 +281,10 @@ async function main(): Promise<void> {
         log(`report: ${writeRunReport(db, "run", { ...summary })}`);
       } catch (err) {
         // A failed run is still a session worth recording.
-        log(`report: ${writeRunReport(db, "run", { error: (err as Error).message })}`);
+        const message = (err as Error).message;
+        log(`report: ${writeRunReport(db, "run", { error: message })}`);
+        // A background job's only reader is a log file nobody opens.
+        notify("JobPilot run failed", message.slice(0, 180));
         throw err;
       }
       return;
@@ -537,6 +545,35 @@ async function main(): Promise<void> {
         return;
       }
       for (const line of funnelLines(counts)) log(line);
+      return;
+    }
+
+    case "backup": {
+      const db = open();
+      const path = backupDatabase(db, join(configDir(), "backups"));
+      log(`backup written: ${path}`);
+      log(`kept: ${listBackups(join(configDir(), "backups")).length} (seven by default)`);
+      return;
+    }
+
+    case "health": {
+      const db = open();
+      log(`scheduler      ${scheduleStatus() ? "installed" : "not installed"}`);
+      const [last] = runHistory(db, 1);
+      if (!last) {
+        log("last run       none recorded");
+      } else {
+        const state = last.finished ? "finished" : "did not finish";
+        log(`last run       ${last.started} · ${state} · ${last.scored} scored`);
+        if (last.errors.length) {
+          log(`run errors     ${last.errors.length}`);
+          for (const e of last.errors.slice(0, 3)) log(`  ${e.source}: ${e.message}`);
+        }
+      }
+      const backups = listBackups(join(configDir(), "backups"));
+      log(`backups        ${backups.length}${backups[0] ? ` (newest ${backups[0]})` : ""}`);
+      const s = stats(db);
+      log(`directory      ${listBoards(db).length} boards · ${s.jobs} postings · ${s.decisions} labelled`);
       return;
     }
 
