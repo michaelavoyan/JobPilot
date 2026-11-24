@@ -17,6 +17,7 @@ import { loadMarket, loadProfile, loadTracks } from "./engine/config.ts";
 import { runAll, runCollect, runDigest, runScore } from "./engine/pipeline.ts";
 import { runEval, printStats, funnelLines } from "./engine/report.ts";
 import { detect } from "./engine/discover.ts";
+import { discoverFromList } from "./engine/discover-list.ts";
 import { availableMarkets, initConfig } from "./engine/setup.ts";
 import { boardToCompany, discoverCompanies, parseBands, searchConfigured } from "./engine/discovery.ts";
 import { collect, SOURCES } from "./engine/ingest/index.ts";
@@ -309,6 +310,42 @@ async function main(): Promise<void> {
       );
       log(`\nwritten: ${path}`);
       warn("now set locations.allowed and comp_floor by hand — they are preferences, not CV facts");
+      return;
+    }
+
+    case "discover-list": {
+      const limitFlag = args.indexOf("--limit");
+      const limit = limitFlag >= 0 ? Number(args[limitFlag + 1]) : 120;
+      if (!Number.isFinite(limit) || limit < 1) fail("--limit must be a positive number");
+
+      const db = open();
+      const boards = listBoards(db, false);
+      const known = new Set(
+        boards.map((b) => b.name.toLowerCase().replace(/[^a-z0-9]/g, "")),
+      );
+      const knownIds = new Set(boards.map((b) => `${b.ats}:${b.ident}`));
+
+      log(`checking up to ${limit} companies from public lists…`);
+      const result = await discoverFromList({ limit, known });
+      const fresh = result.hits.filter((h) => !knownIds.has(`${h.source}:${h.ident}`));
+
+      if (fresh.length) {
+        upsertBoards(
+          db,
+          fresh.map((h) => ({ ats: h.source, ident: h.ident, name: h.name })),
+        );
+      }
+      log(
+        `${result.probed} of ${result.names} compan(ies) checked · ` +
+          `${fresh.length} new board(s), ${result.hits.length - fresh.length} already known`,
+      );
+      for (const hit of fresh) {
+        log(`  ${hit.source.padEnd(10)} ${hit.name.padEnd(24)} ${hit.openRoles} role(s)`);
+      }
+      if (!fresh.length) {
+        log("nothing new. The keyless path finds roughly one board per fifteen companies;");
+        log("a search key finds them by query instead.");
+      }
       return;
     }
 
