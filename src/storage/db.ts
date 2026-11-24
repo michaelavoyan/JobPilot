@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS decision_log (
   at     TEXT NOT NULL
 );
 
+-- Names already probed by keyless discovery, so a daily run does not ask the
+-- same companies again.
+CREATE TABLE IF NOT EXISTS discovery_attempts (
+  name    TEXT PRIMARY KEY,
+  at      TEXT NOT NULL,
+  outcome TEXT
+);
+
 CREATE TABLE IF NOT EXISTS scores (
   job_id       TEXT NOT NULL,
   track        TEXT NOT NULL,
@@ -667,6 +675,30 @@ export function learningRuns(db: Db, limit = 20): LearningRun[] {
     version: String(r.version),
     payload: String(r.payload),
   }));
+}
+
+export function attemptedNames(db: Db): Set<string> {
+  return new Set(
+    (db.prepare("SELECT name FROM discovery_attempts").all() as Row[]).map((r) => String(r.name)),
+  );
+}
+
+export function recordAttempts(db: Db, names: string[], outcome = "probed"): number {
+  if (!names.length) return 0;
+  const stmt = db.prepare(
+    `INSERT INTO discovery_attempts (name, at, outcome) VALUES (?, ?, ?)
+     ON CONFLICT(name) DO UPDATE SET at = excluded.at, outcome = excluded.outcome`,
+  );
+  const at = nowIso();
+  db.exec("BEGIN");
+  try {
+    for (const name of names) stmt.run(name, at, outcome);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  return names.length;
 }
 
 export function topScored(db: Db, minScore: number, limit: number): ScoredJob[] {  const rows = db

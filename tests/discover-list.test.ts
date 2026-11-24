@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { discoverFromList, sameCompany, slugCandidates } from "../src/engine/discover-list.ts";
+import { attemptedNames, open, recordAttempts } from "../src/storage/db.ts";
 
 const response = (data: unknown, status = 200): Response =>
   new Response(typeof data === "string" ? data : JSON.stringify(data), {
@@ -136,4 +137,12 @@ test("the list request identifies itself", async () => {
 
   await discoverFromList({ fetchFn, categories: ["Category:One"] });
   assert.match(String(seen["user-agent"] ?? ""), /JobPilot/);
+});
+
+test("a probed name is remembered once, not once per run", () => {
+  const db = open(":memory:");
+  recordAttempts(db, ["Acme", "Beta"]);
+  recordAttempts(db, ["Acme"]);
+  assert.equal(attemptedNames(db).size, 2);
+  assert.ok(attemptedNames(db).has("Acme"));
 });

@@ -4,10 +4,12 @@ import {
   getJob,
   isStage,
   learningRuns,
+  attemptedNames,
   listBoards,
   listConstraints,
   open,
   proposeConstraints,
+  recordAttempts,
   recordDecision,
   setConstraintStatus,
   STAGES,
@@ -326,9 +328,13 @@ async function main(): Promise<void> {
         boards.map((b) => b.name.toLowerCase().replace(/[^a-z0-9]/g, "")),
       );
       const knownIds = new Set(boards.map((b) => `${b.ats}:${b.ident}`));
+      // Names probed before and found empty are not asked again.
+      const normName = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const skip = new Set([...known, ...[...attemptedNames(db)].map(normName)]);
 
       log(`checking up to ${limit} companies from public lists…`);
-      const result = await discoverFromList({ limit, known });
+      const result = await discoverFromList({ limit, known, skip });
+      recordAttempts(db, result.checked);
       const fresh = result.hits.filter((h) => !knownIds.has(`${h.source}:${h.ident}`));
 
       if (fresh.length) {
