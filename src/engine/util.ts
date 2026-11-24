@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -94,4 +95,31 @@ export function nowIso(): string {
  */
 export function readableFlag(flag: string): string {
   return flag.replace(/_/g, " ").trim();
+}
+
+/** Quotes and backslashes are the only characters that break the script. */
+export function escapeAppleScript(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * A background job's only reader is a log file, and nobody reads those. On a
+ * failure the person who owns the machine gets a desktop notification.
+ * Every failure mode here is silent: a notification must never fail a run.
+ */
+export function notify(title: string, message: string): void {
+  if (env("NOTIFY") === "0") return;
+  if (process.platform !== "darwin") return;
+  try {
+    execFileSync(
+      "osascript",
+      [
+        "-e",
+        `display notification "${escapeAppleScript(message)}" with title "${escapeAppleScript(title)}"`,
+      ],
+      { stdio: "ignore", timeout: 5_000 },
+    );
+  } catch {
+    /* no desktop session, no permission, no problem */
+  }
 }

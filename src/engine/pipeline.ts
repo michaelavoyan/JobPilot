@@ -30,7 +30,9 @@ import { discoverFromList } from "./discover-list.ts";
 import { buildLearning, hasLearning, LEARNING_VERSION, renderLearning } from "./learn.ts";
 import { renderDigest, writeDigest } from "./deliver/digest.ts";
 import { pushTelegram } from "./deliver/telegram.ts";
-import { numEnv, log, nowIso, warn } from "./util.ts";
+import { configDir, numEnv, log, nowIso, warn } from "./util.ts";
+import { backupDatabase } from "../storage/backup.ts";
+import { join } from "node:path";
 import type { SourceError } from "./types.ts";
 
 /**
@@ -392,6 +394,11 @@ export async function runAll(
   let digestPath: string | undefined;
 
   try {
+    // One consistent snapshot per run, seven kept. A job search is months of
+    // decisions; losing the file should never mean losing them.
+    const backup = backupDatabase(db, join(configDir(), "backups"));
+    log(`backup: ${backup}`);
+
     // Optional: grow the directory before collecting, so a new board is used
     // in the same run. Names probed before are skipped, so this is a one-off
     // cost rather than a daily sweep of every company ever seen.

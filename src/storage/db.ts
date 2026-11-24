@@ -663,6 +663,43 @@ export function recordLearningRun(
   ).run(randomUUID(), at, run.labels, run.version, run.payload);
 }
 
+export interface RunRecord {
+  id: string;
+  started: string;
+  finished?: string;
+  scored: number;
+  costUsd: number;
+  errors: { source: string; message: string }[];
+}
+
+/** The last runs, newest first, for `health` and for a human reading the log. */
+export function runHistory(db: Db, limit = 5): RunRecord[] {
+  return (
+    db
+      .prepare(
+        `SELECT id, started, finished, scored, cost_usd, errors FROM runs
+         ORDER BY started DESC LIMIT ?`,
+      )
+      .all(limit) as Row[]
+  ).map((r) => {
+    let errors: { source: string; message: string }[] = [];
+    try {
+      const parsed = JSON.parse(String(r.errors ?? "[]"));
+      if (Array.isArray(parsed)) errors = parsed.map((e) => ({ source: String(e.source), message: String(e.message) }));
+    } catch {
+      /* an unreadable error column is itself an error, reported as empty */
+    }
+    return {
+      id: String(r.id),
+      started: String(r.started),
+      finished: r.finished ? String(r.finished) : undefined,
+      scored: Number(r.scored),
+      costUsd: Number(r.cost_usd),
+      errors,
+    };
+  });
+}
+
 export function learningRuns(db: Db, limit = 20): LearningRun[] {
   return (
     db
