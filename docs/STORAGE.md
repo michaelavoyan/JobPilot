@@ -116,6 +116,9 @@ Two things to notice:
   never leave an old verdict behind
 - a decision **hides** the posting at read time, and undo deletes the row — but
   `decision_log` is append-only, so the fact that a choice was made survives
+- undo also **withdraws unconfirmed constraints** proposed from that decision's
+  note, in the same transaction; a rule the user confirmed stays, because it is
+  their statement rather than the decision's
 
 ---
 

@@ -412,6 +412,10 @@ test("labelling a job offers an undo, and undo restores it", async () => {
     calls.some((c) => c.url.includes("/api/undo") && c.body?.includes("abc123")),
     "undo must reach the server with the job id",
   );
+  assert.ok(
+    calls.some((c) => c.url.includes("/api/learning")),
+    "the learning section refreshes after a restore",
+  );
   assert.equal(dom.window.document.querySelector(".toast"), null, "the toast goes away");
   dom.window.close();
 });

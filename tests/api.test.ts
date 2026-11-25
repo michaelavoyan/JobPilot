@@ -284,6 +284,31 @@ test("an oversized body is refused with 413", async () => {
   assert.equal(res.status, 413);
 });
 
+test("restoring a decision withdraws the constraint it proposed", async () => {
+  await fetch(
+    `${base}/api/feedback`,
+    json({ jobId: "job-1", label: "applied", note: "too far" }),
+  );
+  const before = (await (await fetch(`${base}/api/learning`)).json()) as {
+    constraints: { id: string; status: string }[];
+  };
+  assert.ok(
+    before.constraints.some((c) => c.id === "location_penalty" && c.status === "proposed"),
+    "the note proposed a rule",
+  );
+
+  assert.equal((await fetch(`${base}/api/undo`, json({ jobId: "job-1" }))).status, 200);
+
+  const after = (await (await fetch(`${base}/api/learning`)).json()) as {
+    constraints: { id: string }[];
+  };
+  assert.equal(
+    after.constraints.some((c) => c.id === "location_penalty"),
+    false,
+    "the proposal is gone with the decision that produced it",
+  );
+});
+
 test("restore all clears every decision and keeps the log", async () => {
   await fetch(`${base}/api/feedback`, json({ jobId: "job-1", label: "applied" }));
   await fetch(`${base}/api/feedback`, json({ jobId: "job-2", label: "skipped" }));

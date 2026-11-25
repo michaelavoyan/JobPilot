@@ -571,6 +571,9 @@ function offerUndo(job, label) {
     loadState();
     loadJobs();
     loadHidden();
+    // A restored decision is not evidence any more, and any proposal that came
+    // from its note is withdrawn by the server.
+    loadLearning();
   });
   bar.appendChild(undo);
 

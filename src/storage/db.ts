@@ -798,15 +798,40 @@ function logDecision(
   ).run(jobId, entry.label ?? null, entry.note ?? null, entry.action, nowIso());
 }
 
+function inTransaction<T>(db: Db, work: () => T): T {
+  db.exec("BEGIN");
+  try {
+    const out = work();
+    db.exec("COMMIT");
+    return out;
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+/** A proposal dies with the decision it came from; a confirmed rule does not. */
+function withdrawProposed(db: Db, jobIds: string[]): number {
+  if (!jobIds.length) return 0;
+  const stmt = db.prepare(
+    "DELETE FROM learning_constraints WHERE status = 'proposed' AND job_id = ?",
+  );
+  let removed = 0;
+  for (const id of jobIds) removed += Number(stmt.run(id).changes);
+  return removed;
+}
+
 export function recordDecision(db: Db, jobId: string, label: string, note?: string): void {
   const now = nowIso();
-  db.prepare(
-    `INSERT INTO decisions (job_id, label, note, at, updated_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(job_id) DO UPDATE SET label = excluded.label,
-       note = COALESCE(excluded.note, decisions.note),
-       updated_at = excluded.updated_at`,
-  ).run(jobId, label, note ?? null, now, now);
-  logDecision(db, jobId, { label, note, action: "set" });
+  inTransaction(db, () => {
+    db.prepare(
+      `INSERT INTO decisions (job_id, label, note, at, updated_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(job_id) DO UPDATE SET label = excluded.label,
+         note = COALESCE(excluded.note, decisions.note),
+         updated_at = excluded.updated_at`,
+    ).run(jobId, label, note ?? null, now, now);
+    logDecision(db, jobId, { label, note, action: "set" });
+  });
 }
 
 /** Counts per stage, in pipeline order, for the funnel report. */
@@ -820,17 +845,20 @@ export function funnelCounts(db: Db): { stage: string; n: number }[] {
 
 /** Forgets a decision so the posting can appear again. */
 export function clearDecision(db: Db, jobId: string): boolean {
-  const previous = db
-    .prepare("SELECT label, note FROM decisions WHERE job_id = ?")
-    .get(jobId) as Row | undefined;
-  const result = db.prepare("DELETE FROM decisions WHERE job_id = ?").run(jobId);
-  if (!previous) return false;
-  logDecision(db, jobId, {
-    label: String(previous.label),
-    note: previous.note ? String(previous.note) : undefined,
-    action: "cleared",
+  return inTransaction(db, () => {
+    const previous = db
+      .prepare("SELECT label, note FROM decisions WHERE job_id = ?")
+      .get(jobId) as Row | undefined;
+    if (!previous) return false;
+    db.prepare("DELETE FROM decisions WHERE job_id = ?").run(jobId);
+    logDecision(db, jobId, {
+      label: String(previous.label),
+      note: previous.note ? String(previous.note) : undefined,
+      action: "cleared",
+    });
+    withdrawProposed(db, [jobId]);
+    return true;
   });
-  return Number(result.changes) > 0;
 }
 
 /**
@@ -846,8 +874,8 @@ export function clearAllDecisions(db: Db): number {
   const log = db.prepare(
     "INSERT INTO decision_log (job_id, label, note, action, at) VALUES (?, ?, ?, 'cleared', ?)",
   );
-  db.exec("BEGIN");
-  try {
+  const ids = rows.map((row) => String(row.job_id));
+  inTransaction(db, () => {
     for (const row of rows) {
       log.run(
         String(row.job_id),
@@ -857,11 +885,8 @@ export function clearAllDecisions(db: Db): number {
       );
     }
     db.prepare("DELETE FROM decisions").run();
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+    withdrawProposed(db, ids);
+  });
   return rows.length;
 }
 
