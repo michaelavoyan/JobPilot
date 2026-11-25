@@ -61,10 +61,8 @@ function seed() {
   recordDecision(db, "old", "skipped");
 
   // Age one decision beyond the holdout window.
-  db.prepare("UPDATE decisions SET at = ? WHERE job_id = ?").run(
-    new Date(Date.now() - 60 * 86_400_000).toISOString(),
-    "old",
-  );
+  const old = new Date(Date.now() - 60 * 86_400_000).toISOString();
+  db.prepare("UPDATE decisions SET at = ?, updated_at = ? WHERE job_id = ?").run(old, old, "old");
   return db;
 }
 
@@ -87,4 +85,18 @@ test("without a holdout every label counts", () => {
   assert.ok(lines.some((l) => l.includes("labels: 2")));
   assert.ok(lines.some((l) => l.includes("1/2 = 0.50")));
   assert.ok(!lines.some((l) => l.includes("holdout")), "no split is implied");
+});
+
+test("a stage moved today is recent even when the decision is old", () => {
+  const db = seed();
+  db.prepare("UPDATE decisions SET updated_at = ? WHERE job_id = ?").run(
+    new Date().toISOString(),
+    "old",
+  );
+
+  const lines = capture(() => runEval(db, [track], { holdoutDays: 30 }));
+  assert.ok(
+    lines.some((l) => l.includes("holdout: 2 of 2")),
+    "the holdout follows the latest change, not the first click",
+  );
 });

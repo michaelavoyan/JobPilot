@@ -147,6 +147,13 @@ export async function executePlan(
       costUsd,
       errors: [{ source: "agent", message: (err as Error).message }],
     });
+    // A failed plan is still a decision worth explaining later.
+    recordPolicyRun(db, {
+      version: policyVersion(policy),
+      plan: JSON.stringify(plan),
+      result: JSON.stringify({ error: (err as Error).message, ...result }),
+      runId,
+    });
     throw err;
   }
 }

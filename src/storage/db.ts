@@ -1085,12 +1085,16 @@ export function listDecisions(
 
 export function decisions(
   db: Db,
-): { jobId: string; label: string; note?: string; at: string }[] {
-  return (db.prepare("SELECT job_id, label, note, at FROM decisions").all() as Row[]).map((r) => ({
+): { jobId: string; label: string; note?: string; at: string; updatedAt: string }[] {
+  return (
+    db.prepare("SELECT job_id, label, note, at, updated_at FROM decisions").all() as Row[]
+  ).map((r) => ({
     jobId: String(r.job_id),
     label: String(r.label),
     note: r.note ? String(r.note) : undefined,
     at: String(r.at),
+    // A stage moved today is a decision made today, even for the holdout.
+    updatedAt: r.updated_at ? String(r.updated_at) : String(r.at),
   }));
 }
 

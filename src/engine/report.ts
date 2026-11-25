@@ -251,7 +251,7 @@ export function runEval(
   const cutoff = options.holdoutDays
     ? new Date(Date.now() - options.holdoutDays * 86_400_000).toISOString()
     : undefined;
-  const labels = cutoff ? all.filter((l) => l.at >= cutoff) : all;
+  const labels = cutoff ? all.filter((l) => (l.updatedAt || l.at) >= cutoff) : all;
   if (cutoff) {
     log(
       `holdout: ${labels.length} of ${all.length} labels decided since ` +

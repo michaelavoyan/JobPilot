@@ -165,3 +165,23 @@ test("the policy fingerprint is stable and short", () => {
   assert.match(policyVersion(policy), /^[0-9a-f]{8}$/);
   assert.equal(policyVersion(policy), policyVersion({ ...policy }));
 });
+
+test("a failed plan is recorded as a run and a policy entry", async () => {
+  const db = open(":memory:");
+
+  await assert.rejects(
+    () =>
+      executePlan(db, planDay(state({ boards: 0 }), policy), policy, {
+        discoverFromList: async () => {
+          throw new Error("search offline");
+        },
+        backup: () => "stub-backup",
+      }),
+    /search offline/,
+  );
+
+  const [run] = runHistory(db);
+  assert.match(run.errors[0].message, /search offline/);
+  const [entry] = policyHistory(db);
+  assert.match(String(entry.result), /search offline/);
+});
