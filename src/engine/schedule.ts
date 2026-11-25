@@ -9,6 +9,7 @@ export const LABEL = "ai.jobpilot.daily";
 export interface PlistOptions {
   nodePath: string;
   cliPath: string;
+  command: string;
   workDir: string;
   logPath: string;
   errorLogPath: string;
@@ -32,7 +33,7 @@ export function renderPlist(o: PlistOptions): string {
   <array>
     <string>${o.nodePath}</string>
     <string>${o.cliPath}</string>
-    <string>run</string>
+    <string>${o.command}</string>
   </array>
   <key>WorkingDirectory</key>
   <string>${o.workDir}</string>
@@ -61,6 +62,7 @@ function defaults(): PlistOptions {
   return {
     nodePath: process.execPath,
     cliPath: resolve(ROOT, "src", "cli.ts"),
+    command: "agent",
     workDir: ROOT,
     logPath: resolve(logs, "jobpilot.log"),
     errorLogPath: resolve(logs, "jobpilot.err.log"),

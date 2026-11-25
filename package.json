@@ -31,7 +31,8 @@
     "screenshot": "node scripts/screenshot.ts",
     "discover-list": "node src/cli.ts discover-list",
     "health": "node src/cli.ts health",
-    "backup": "node src/cli.ts backup"
+    "backup": "node src/cli.ts backup",
+    "agent": "node src/cli.ts agent"
   },
   "dependencies": {
     "fflate": "^0.8.3",

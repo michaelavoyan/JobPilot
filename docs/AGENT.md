@@ -9,6 +9,11 @@ three capabilities it does not have — **outcomes**, **choices**, **autonomy** 
 in that order. Autonomy first would produce a machine that searches more and
 knows less.
 
+> **Status (2026-11-25).** A0–A3 are implemented: stage outcomes, a board-yield
+> ledger with retirement, holdout evaluation, and a planner behind
+> `npm run agent` that the scheduler now runs. A4 needs a search key. A5 needs
+> outcomes that do not exist yet. A6 waits on both.
+
 ---
 
 ## 1. What "agent" means here
@@ -156,6 +161,8 @@ without leaving it worse.
 
 ### A0 — Outcomes (1–2 days)
 
+**Status:** done. The hidden list carries a stage selector, and every stage change is an event.
+
 **Why first:** with zero interviews recorded, every downstream claim is fiction.
 
 - UI: in the hidden list, a stage selector per row (applied, screening,
@@ -170,6 +177,8 @@ interview rate, or explicitly says "no outcomes yet".
 
 ### A1 — Yield ledger (1 day)
 
+**Status:** done. `board_yield` is written per run; a board with 14 empty runs is retired and revival is automatic.
+
 - Write one `board_yield` row per board per run: fetched, eligible, matched.
 - `npm run agent-status` shows the top and bottom five boards.
 - Retire a board after 14 consecutive runs with zero eligible postings;
@@ -182,6 +191,8 @@ candidate.
 
 ### A2 — Holdout evaluation (1–2 days)
 
+**Status:** done. `npm run eval -- --holdout [days]` measures only labels made after the window.
+
 - Split labels by time: tuner uses labels older than `HOLDOUT_DAYS` (default
   30); the test uses newer ones.
 - `eval --holdout` reports precision@10 and AUC on the test slice only.
@@ -192,6 +203,8 @@ candidate.
 **Acceptance:** every future claim about learning is out-of-sample.
 
 ### A3 — Planner v1 (1–2 days)
+
+**Status:** done. `npm run agent -- --dry` prints the plan; the real run records `policy_runs` and a run row. Existing schedulers need `npm run schedule -- install` once to switch from `run` to `agent`.
 
 A pure function with four rules, all off by default until measured:
 
@@ -213,6 +226,8 @@ otherwise                              → collect, score, digest
 
 ### A4 — Search-driven discovery (1–2 days, needs a key)
 
+**Status:** not started. Requires `BRAVE_API_KEY` or Google CSE.
+
 - Generate queries from the profile: each track label × each city × ATS host.
 - Run `discover-web` inside the plan when A3 asks for it.
 - Resolve Comeet hits: `comeet.com/jobs/<slug>/<uid>` carries both identifiers.
@@ -224,6 +239,8 @@ otherwise                              → collect, score, digest
 identity before adding a board.
 
 ### A5 — Policy adoption (2–3 days, needs outcomes)
+
+**Status:** not started. Cannot be honest before ~50 applications.
 
 - Experiments: assign postings to prompt/threshold variants deterministically,
   stamp `scores.arm`.
@@ -238,6 +255,8 @@ identity before adding a board.
 matching holdout result, or an explicit note that it was a judgement call.
 
 ### A6 — Bandit over discovery queries (2–3 days, last)
+
+**Status:** not started.
 
 Only once A0–A5 have produced ≥50 outcomes:
 

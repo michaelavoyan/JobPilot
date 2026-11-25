@@ -5,6 +5,7 @@ import { LABEL, renderPlist, plistPath } from "../src/engine/schedule.ts";
 const opts = {
   nodePath: "/usr/local/bin/node",
   cliPath: "/repo/src/cli.ts",
+  command: "agent",
   workDir: "/repo",
   logPath: "/home/u/Library/Logs/jobpilot.log",
   errorLogPath: "/home/u/Library/Logs/jobpilot.err.log",
@@ -17,7 +18,7 @@ test("plist carries the label, command and working directory", () => {
   assert.ok(xml.includes(`<string>${LABEL}</string>`));
   assert.ok(xml.includes("<string>/usr/local/bin/node</string>"));
   assert.ok(xml.includes("<string>/repo/src/cli.ts</string>"));
-  assert.ok(xml.includes("<string>run</string>"));
+  assert.ok(xml.includes("<string>agent</string>"), "the daily job decides, not just runs");
   assert.ok(xml.includes("<string>/repo</string>"));
 });
 

@@ -8,6 +8,7 @@ import {
   recordLearningRun,
   attemptedNames,
   recordAttempts,
+  recordBoardYield,
   saveScores,
   saveShadowScores,
   shadowedJobIds,
@@ -379,6 +380,7 @@ export async function runAll(
   digest?: string;
 }> {
   const d = withDeps(deps);
+  const startedAt = nowIso();
   const runId = startRun(db);
   let collected = 0;
   let inserted = 0;
@@ -443,6 +445,19 @@ export async function runAll(
     const digest = await runDigest(db, d);
     digestMatches = digest.matches;
     digestPath = digest.path;
+
+    const yields = recordBoardYield(db, {
+      at: nowIso(),
+      runStart: startedAt,
+      threshold: numEnv("MIN_SCORE", 65),
+      scored: scored > 0,
+    });
+    if (yields.retired.length) {
+      warn(
+        `${yields.retired.length} board(s) retired after 14 runs with no eligible posting: ` +
+          yields.retired.slice(0, 5).join(", "),
+      );
+    }
 
     const st = stats(db);
     log(

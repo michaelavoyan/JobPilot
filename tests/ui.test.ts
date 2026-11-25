@@ -889,3 +889,29 @@ test("a card shows one location and keeps the rest in the tooltip", async () => 
   assert.match((meta as HTMLElement).title, /Israel - HQ/, "but they remain available on hover");
   dom.window.close();
 });
+
+test("a decided job's stage can change without restoring it", async () => {
+  const one = [
+    { jobId: "a", label: "applied", company: "Via", title: "Mobile Team Lead", at: "x" },
+  ];
+  const { dom, calls } = bootWith((url) =>
+    url.includes("/api/decisions") ? ok({ decisions: one }) : ok({ ok: true }),
+  );
+  await settle();
+
+  const stage = dom.window.document.querySelector(".hidden-stage-select") as HTMLSelectElement;
+  assert.ok(stage, "the row carries a stage, not a static label");
+  assert.equal(stage.value, "applied");
+
+  stage.value = "interview";
+  stage.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  await settle();
+
+  assert.ok(
+    calls.some(
+      (c) => c.url.includes("/api/feedback") && c.body?.includes('"label":"interview"'),
+    ),
+    "the new stage reaches the server",
+  );
+  dom.window.close();
+});

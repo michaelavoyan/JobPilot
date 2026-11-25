@@ -49,6 +49,27 @@ CREATE TABLE IF NOT EXISTS discovery_attempts (
   outcome TEXT
 );
 
+-- What each board produced per run, so a board that never yields can retire.
+-- Every plan the agent produced, with its result, so yesterday can be explained.
+CREATE TABLE IF NOT EXISTS policy_runs (
+  id      TEXT PRIMARY KEY,
+  at      TEXT NOT NULL,
+  version TEXT NOT NULL,
+  plan    TEXT NOT NULL,
+  result  TEXT,
+  run_id  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS board_yield (
+  ats      TEXT NOT NULL,
+  ident    TEXT NOT NULL,
+  at       TEXT NOT NULL,
+  fetched  INTEGER NOT NULL,
+  eligible INTEGER NOT NULL,
+  matched  INTEGER NOT NULL,
+  PRIMARY KEY (ats, ident, at)
+);
+
 CREATE TABLE IF NOT EXISTS scores (
   job_id       TEXT NOT NULL,
   track        TEXT NOT NULL,
@@ -714,6 +735,138 @@ export function learningRuns(db: Db, limit = 20): LearningRun[] {
   }));
 }
 
+export interface YieldRow {
+  ats: string;
+  ident: string;
+  name: string;
+  fetched: number;
+  eligible: number;
+  matched: number;
+}
+
+/**
+ * One row per board per run. `eligible` counts postings that reached scoring,
+ * `matched` those at or above the threshold. Retirement is evaluated only when
+ * the run actually scored something: without a key every board would look dead.
+ */
+export function recordBoardYield(
+  db: Db,
+  options: { at: string; runStart: string; threshold: number; scored: boolean; keep?: number },
+): { rows: YieldRow[]; retired: string[] } {
+  const keep = options.keep ?? 14;
+  const boards = listBoards(db, false);
+  if (!boards.length) return { rows: [], retired: [] };
+
+  const fetchedStmt = db.prepare(
+    "SELECT COUNT(*) AS n FROM jobs WHERE source = ? AND company = ? AND last_seen >= ?",
+  );
+  const eligibleStmt = db.prepare(
+    `SELECT COUNT(DISTINCT s.job_id) AS n FROM scores s JOIN jobs j ON j.id = s.job_id
+     WHERE j.source = ? AND j.company = ? AND s.scored_at >= ?`,
+  );
+  const matchedStmt = db.prepare(
+    `SELECT COUNT(DISTINCT s.job_id) AS n FROM scores s JOIN jobs j ON j.id = s.job_id
+     WHERE j.source = ? AND j.company = ? AND s.scored_at >= ? AND s.score >= ?`,
+  );
+  const insert = db.prepare(
+    "INSERT OR REPLACE INTO board_yield (ats, ident, at, fetched, eligible, matched) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  const recent = db.prepare(
+    "SELECT eligible FROM board_yield WHERE ats = ? AND ident = ? ORDER BY at DESC LIMIT ?",
+  );
+  const retire = db.prepare("UPDATE boards SET enabled = 0 WHERE ats = ? AND ident = ?");
+
+  const rows: YieldRow[] = [];
+  const retired: string[] = [];
+  db.exec("BEGIN");
+  try {
+    for (const board of boards) {
+      const fetched = Number(
+        (fetchedStmt.get(board.ats, board.name, options.runStart) as { n: number }).n ?? 0,
+      );
+      const eligible = Number(
+        (eligibleStmt.get(board.ats, board.name, options.runStart) as { n: number }).n ?? 0,
+      );
+      const matched = Number(
+        (matchedStmt.get(board.ats, board.name, options.runStart, options.threshold) as {
+          n: number;
+        }).n ?? 0,
+      );
+      insert.run(board.ats, board.ident, options.at, fetched, eligible, matched);
+      rows.push({ ats: board.ats, ident: board.ident, name: board.name, fetched, eligible, matched });
+
+      if (options.scored && board.enabled) {
+        const history = recent.all(board.ats, board.ident, keep) as { eligible: number }[];
+        if (
+          history.length >= keep &&
+          history.every((h) => Number(h.eligible) === 0)
+        ) {
+          retire.run(board.ats, board.ident);
+          retired.push(board.name);
+        }
+      }
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  return { rows, retired };
+}
+
+export function recordPolicyRun(
+  db: Db,
+  entry: { version: string; plan: string; result?: string; runId?: string },
+): string {
+  const id = randomUUID();
+  db.prepare(
+    "INSERT INTO policy_runs (id, at, version, plan, result, run_id) VALUES (?, ?, ?, ?, ?, ?)",
+  ).run(id, nowIso(), entry.version, entry.plan, entry.result ?? null, entry.runId ?? null);
+  return id;
+}
+
+export interface PolicyRecord {
+  id: string;
+  at: string;
+  version: string;
+  plan: string;
+  result?: string;
+  runId?: string;
+}
+
+export function policyHistory(db: Db, limit = 10): PolicyRecord[] {
+  return (
+    db
+      .prepare("SELECT * FROM policy_runs ORDER BY at DESC LIMIT ?")
+      .all(limit) as Row[]
+  ).map((r) => ({
+    id: String(r.id),
+    at: String(r.at),
+    version: String(r.version),
+    plan: String(r.plan),
+    result: r.result ? String(r.result) : undefined,
+    runId: r.run_id ? String(r.run_id) : undefined,
+  }));
+}
+
+export function latestBoardYield(db: Db): YieldRow[] {
+  return (
+    db
+      .prepare(
+        `SELECT y.*, b.name FROM board_yield y JOIN boards b ON b.ats = y.ats AND b.ident = y.ident
+         WHERE y.at = (SELECT MAX(at) FROM board_yield)`,
+      )
+      .all() as Row[]
+  ).map((r) => ({
+    ats: String(r.ats),
+    ident: String(r.ident),
+    name: String(r.name),
+    fetched: Number(r.fetched),
+    eligible: Number(r.eligible),
+    matched: Number(r.matched),
+  }));
+}
+
 export function attemptedNames(db: Db): Set<string> {
   return new Set(
     (db.prepare("SELECT name FROM discovery_attempts").all() as Row[]).map((r) => String(r.name)),
@@ -930,11 +1083,14 @@ export function listDecisions(
   }));
 }
 
-export function decisions(db: Db): { jobId: string; label: string; note?: string }[] {
-  return (db.prepare("SELECT job_id, label, note FROM decisions").all() as Row[]).map((r) => ({
+export function decisions(
+  db: Db,
+): { jobId: string; label: string; note?: string; at: string }[] {
+  return (db.prepare("SELECT job_id, label, note, at FROM decisions").all() as Row[]).map((r) => ({
     jobId: String(r.job_id),
     label: String(r.label),
     note: r.note ? String(r.note) : undefined,
+    at: String(r.at),
   }));
 }
 

@@ -805,7 +805,30 @@ function renderHidden() {
 
   for (const entry of shown) {
     const row = el("div", "hidden-row");
-    row.appendChild(el("span", "hidden-stage", entry.label));
+
+    // A decision is a stage, not a boolean: the funnel is only real if the
+    // stage can move after the first click.
+    const stage = el("select", "hidden-stage-select");
+    stage.setAttribute("aria-label", "Stage for this posting");
+    for (const value of ["shortlisted", "applied", "screening", "interview", "offer", "rejected", "skipped"]) {
+      const option = el("option", "", value);
+      option.value = value;
+      stage.appendChild(option);
+    }
+    stage.value = entry.label;
+    stage.addEventListener("change", async () => {
+      const ok = await postAction("/api/feedback", { jobId: entry.jobId, label: stage.value });
+      if (!ok) {
+        stage.value = entry.label;
+        notice("Could not change that stage. Try again.");
+        return;
+      }
+      loadHidden();
+      loadState();
+      loadJobs();
+      loadLearning();
+    });
+    row.appendChild(stage);
     row.appendChild(
       el("span", "hidden-title", `${entry.company || "—"} — ${entry.title || entry.jobId}`),
     );

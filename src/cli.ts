@@ -5,6 +5,7 @@ import {
   isStage,
   learningRuns,
   attemptedNames,
+  latestBoardYield,
   listBoards,
   listConstraints,
   runHistory,
@@ -23,6 +24,9 @@ import { runAll, runCollect, runDigest, runScore } from "./engine/pipeline.ts";
 import { runEval, printStats, funnelLines } from "./engine/report.ts";
 import { detect } from "./engine/discover.ts";
 import { discoverFromList } from "./engine/discover-list.ts";
+import { executePlan } from "./engine/agent/execute.ts";
+import { planDay } from "./engine/agent/plan.ts";
+import { agentState } from "./engine/agent/state.ts";
 import { availableMarkets, initConfig } from "./engine/setup.ts";
 import { boardToCompany, discoverCompanies, parseBands, searchConfigured } from "./engine/discovery.ts";
 import { collect, SOURCES } from "./engine/ingest/index.ts";
@@ -52,6 +56,7 @@ import {
   setConfigDir,
   templatesDir,
   today,
+  numEnv,
   warn,
 } from "./engine/util.ts";
 
@@ -266,6 +271,35 @@ async function main(): Promise<void> {
       const db = open();
       const summary = await runDigest(db);
       log(`report: ${writeRunReport(db, "digest", { ...summary })}`);
+      return;
+    }
+
+    case "agent": {
+      const db = open();
+      const policy = {
+        monthlyCapUsd: numEnv("AGENT_MONTHLY_CAP_USD", 5),
+        minMatchesPerWeek: numEnv("AGENT_MIN_MATCHES", 3),
+        discoveryLimit: numEnv("AGENT_DISCOVERY_LIMIT", 40),
+      };
+      const state = agentState(db, {
+        threshold: numEnv("MIN_SCORE", 65),
+        providerConfigured: Boolean(provider()),
+      });
+      const plan = planDay(state, policy);
+
+      log(
+        `agent plan · ${state.matchesLast7} match(es) in 7 days · ` +
+          `$${state.spendLast30Usd.toFixed(2)} this month · ${state.boards} board(s)`,
+      );
+      for (const action of plan.actions) log(`  ${action.kind.padEnd(8)} ${action.reason}`);
+      for (const note of plan.notes) warn(note);
+      if (args.includes("--dry")) return;
+
+      const result = await executePlan(db, plan, policy);
+      log(
+        `agent done · +${result.boardsAdded} board(s) · ${result.collected} collected · ` +
+          `${result.scored} scored · ${result.matches} match(es)`,
+      );
       return;
     }
 
@@ -533,7 +567,14 @@ async function main(): Promise<void> {
 
     case "eval": {
       const db = open();
-      runEval(db, loadTracks());
+      const flag = args.indexOf("--holdout");
+      let holdoutDays: number | undefined;
+      if (flag >= 0) {
+        const next = args[flag + 1];
+        const n = next && !next.startsWith("--") ? Number(next) : 30;
+        holdoutDays = Number.isFinite(n) && n > 0 ? Math.round(n) : 30;
+      }
+      runEval(db, loadTracks(), { holdoutDays });
       return;
     }
 
@@ -570,6 +611,12 @@ async function main(): Promise<void> {
           for (const e of last.errors.slice(0, 3)) log(`  ${e.source}: ${e.message}`);
         }
       }
+      const yields = latestBoardYield(db);
+      if (yields.length) {
+        const producing = yields.filter((y) => y.matched > 0).length;
+        log(`yield          ${producing} of ${yields.length} board(s) matched in the last run`);
+      }
+
       const backups = listBackups(join(configDir(), "backups"));
       log(`backups        ${backups.length}${backups[0] ? ` (newest ${backups[0]})` : ""}`);
       const s = stats(db);
