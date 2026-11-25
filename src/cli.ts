@@ -5,8 +5,10 @@ import {
   isStage,
   learningRuns,
   attemptedNames,
+  decisions,
   latestBoardYield,
   listBoards,
+  policyHistory,
   listConstraints,
   runHistory,
   stats,
@@ -271,6 +273,66 @@ async function main(): Promise<void> {
       const db = open();
       const summary = await runDigest(db);
       log(`report: ${writeRunReport(db, "digest", { ...summary })}`);
+      return;
+    }
+
+    case "agent-status": {
+      const db = open();
+      const policy = {
+        monthlyCapUsd: numEnv("AGENT_MONTHLY_CAP_USD", 5),
+        minMatchesPerWeek: numEnv("AGENT_MIN_MATCHES", 3),
+        discoveryLimit: numEnv("AGENT_DISCOVERY_LIMIT", 40),
+      };
+      const state = agentState(db, {
+        threshold: numEnv("MIN_SCORE", 65),
+        providerConfigured: Boolean(provider()),
+      });
+
+      log(`scheduler      ${scheduleStatus() ? "installed" : "not installed"}`);
+      log(`matches        ${state.matchesLast7} in the last 7 days`);
+      log(
+        `spend          $${state.spendLast30Usd.toFixed(2)} of ` +
+          `$${policy.monthlyCapUsd.toFixed(2)} this month`,
+      );
+
+      const yields = latestBoardYield(db);
+      log(
+        `boards         ${state.boards}` +
+          (yields.length
+            ? ` · ${yields.filter((y) => y.matched > 0).length} produced a match last run`
+            : ""),
+      );
+      if (yields.length) {
+        const top = [...yields]
+          .filter((y) => y.matched > 0)
+          .sort((a, b) => b.matched - a.matched)
+          .slice(0, 3)
+          .map((y) => `${y.name} ${y.matched}`)
+          .join(", ");
+        log(`yield          ${top || "no board produced a match in the last run"}`);
+      }
+
+      const [last] = policyHistory(db, 1);
+      if (last) {
+        let plan = "unreadable";
+        try {
+          const parsed = JSON.parse(last.plan) as { actions?: { kind?: string }[] };
+          plan = (parsed.actions ?? []).map((a) => a.kind).join(" → ") || "nothing";
+        } catch {
+          /* an unreadable plan is itself the answer */
+        }
+        log(`last plan      ${last.at} · rules ${last.version} · ${plan}`);
+      } else {
+        log("last plan      none yet");
+      }
+
+      const labels = decisions(db);
+      const count = (stage: string) => labels.filter((l) => l.label === stage).length;
+      log(
+        `outcomes       ${["applied", "screening", "interview", "offer", "rejected", "skipped"]
+          .map((stage) => `${count(stage)} ${stage}`)
+          .join(" · ")}`,
+      );
       return;
     }
 

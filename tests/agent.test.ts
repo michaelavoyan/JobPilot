@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  latestBoardYield,
   open,
   policyHistory,
   recordAttempts,
@@ -151,6 +152,8 @@ test("executing a plan adds boards and calls each step once", async () => {
   assert.equal(runs.length, 1, "an agent run is a run, visible to health");
   assert.equal(runs[0].scored, 2);
   assert.equal(runs[0].errors.length, 0);
+
+  assert.equal(latestBoardYield(db).length, 1, "the run records what the board produced");
 
   const policies = policyHistory(db);
   assert.equal(policies.length, 1, "the plan and its result are recorded");

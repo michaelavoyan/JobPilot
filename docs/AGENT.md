@@ -204,7 +204,7 @@ candidate.
 
 ### A3 — Planner v1 (1–2 days)
 
-**Status:** done. `npm run agent -- --dry` prints the plan; the real run records `policy_runs` and a run row. Existing schedulers need `npm run schedule -- install` once to switch from `run` to `agent`.
+**Status:** done. `npm run agent -- --dry` prints the plan; the real run records `policy_runs`, a run row and the board yield. `npm run agent-status` reports the plan, spend, yield and outcomes. Existing schedulers need `npm run schedule -- install` once to switch from `run` to `agent`.
 
 A pure function with four rules, all off by default until measured:
 
