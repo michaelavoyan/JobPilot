@@ -833,6 +833,38 @@ export function clearDecision(db: Db, jobId: string): boolean {
   return Number(result.changes) > 0;
 }
 
+/**
+ * Clears every decision, keeping the log. Used by "restore all", which is
+ * destructive on purpose: the labels are the eval set, and the caller must
+ * confirm it first.
+ */
+export function clearAllDecisions(db: Db): number {
+  const rows = db.prepare("SELECT job_id, label, note FROM decisions").all() as Row[];
+  if (!rows.length) return 0;
+
+  const at = nowIso();
+  const log = db.prepare(
+    "INSERT INTO decision_log (job_id, label, note, action, at) VALUES (?, ?, ?, 'cleared', ?)",
+  );
+  db.exec("BEGIN");
+  try {
+    for (const row of rows) {
+      log.run(
+        String(row.job_id),
+        String(row.label),
+        row.note ? String(row.note) : null,
+        at,
+      );
+    }
+    db.prepare("DELETE FROM decisions").run();
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  return rows.length;
+}
+
 /** Every change ever made to a decision, newest first. */
 export function decisionHistory(
   db: Db,

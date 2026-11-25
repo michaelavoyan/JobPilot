@@ -6,6 +6,7 @@ import { basename, extname, join, resolve, sep } from "node:path";
 import { parse, stringify } from "yaml";
 import { spawn } from "node:child_process";
 import {
+  clearAllDecisions,
   clearDecision,
   countScored,
   findJobByPrefix,
@@ -160,6 +161,9 @@ async function readRawBody(req: IncomingMessage, limit: number): Promise<Buffer>
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
     if (size > limit) {
+      // The rest of this body is still arriving. Discard it, or the next
+      // request on this keep-alive connection starts mid-body and hangs.
+      req.resume();
       throw Object.assign(new Error("body too large"), { status: 413 });
     }
     chunks.push(chunk as Buffer);
@@ -587,6 +591,10 @@ export function startServer(options: ServerOptions = {}) {
 
       if (pathname === "/api/undo" && req.method === "POST") {
         const body = await readJsonBody(req);
+        if (body.all === true) {
+          json(res, 200, { ok: true, cleared: clearAllDecisions(db) });
+          return;
+        }
         const id = String(body.jobId ?? "");
         if (!id) {
           json(res, 400, { error: "jobId is required" });
@@ -703,10 +711,20 @@ export function startServer(options: ServerOptions = {}) {
       json(res, 404, { error: "not found" });
     } catch (err) {
       const status = (err as { status?: number }).status ?? 500;
-      if (!res.headersSent) json(res, status, { error: (err as Error).message });
-      else res.end();
+      if (!res.headersSent) {
+        // A request we refused to read cannot share a connection with the next.
+        if (status === 413) res.setHeader("connection", "close");
+        json(res, status, { error: (err as Error).message });
+      } else {
+        res.end();
+      }
     }
   });
+
+  // The default 5 s idle timeout is shorter than a browser's: a reused socket
+  // can be closed mid-request and surface as ECONNRESET on the next fetch.
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
 
   server.listen(port, "127.0.0.1", () => {
     log(`JobPilot UI  →  http://127.0.0.1:${port}`);

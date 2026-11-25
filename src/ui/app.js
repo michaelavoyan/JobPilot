@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const state = { running: false, markets: [], interests: [] };
+const state = { running: false, markets: [], interests: [], hidden: [], hiddenQuery: "" };
 
 /* ---------- helpers ---------- */
 
@@ -767,38 +767,85 @@ $("filterMin").addEventListener("change", loadJobs);
 async function loadHidden() {
   try {
     const { decisions } = await (await fetch("/api/decisions")).json();
-    const box = $("hiddenBox");
-    const list = $("hiddenList");
-
+    state.hidden = decisions;
     $("hiddenSummary").textContent = `${decisions.length} hidden`;
-    box.hidden = decisions.length === 0;
-    list.textContent = "";
-
-    for (const entry of decisions) {
-      const row = el("div", "hidden-row");
-      row.appendChild(el("span", "hidden-stage", entry.label));
-      row.appendChild(
-        el("span", "hidden-title", `${entry.company || "—"} — ${entry.title || entry.jobId}`),
-      );
-
-      const restore = el("button", "ghost", "Restore");
-      restore.addEventListener("click", async () => {
-        const ok = await postAction("/api/undo", { jobId: entry.jobId });
-        if (!ok) {
-          notice("Could not restore that posting. Try again.");
-          return;
-        }
-        loadHidden();
-        loadJobs();
-        loadState();
-      });
-      row.appendChild(restore);
-      list.appendChild(row);
-    }
+    $("hiddenBox").hidden = decisions.length === 0;
+    renderHidden();
   } catch {
     /* the list is a convenience; a failure must not break the page */
   }
 }
+
+function renderHidden() {
+  const list = $("hiddenList");
+  list.textContent = "";
+
+  const query = state.hiddenQuery.trim().toLowerCase();
+  const shown = state.hidden.filter(
+    (entry) =>
+      !query ||
+      `${entry.company ?? ""} ${entry.title ?? ""} ${entry.label ?? ""}`
+        .toLowerCase()
+        .includes(query),
+  );
+
+  if (!shown.length) {
+    list.appendChild(
+      el("div", "hidden-empty", query ? "No hidden job matches that search." : "Nothing hidden."),
+    );
+    return;
+  }
+
+  for (const entry of shown) {
+    const row = el("div", "hidden-row");
+    row.appendChild(el("span", "hidden-stage", entry.label));
+    row.appendChild(
+      el("span", "hidden-title", `${entry.company || "—"} — ${entry.title || entry.jobId}`),
+    );
+
+    const restore = el("button", "ghost", "Restore");
+    restore.title = "Returns it to the list and clears Applied/Skipped";
+    restore.addEventListener("click", async () => {
+      const ok = await postAction("/api/undo", { jobId: entry.jobId });
+      if (!ok) {
+        notice("Could not restore that posting. Try again.");
+        return;
+      }
+      loadHidden();
+      loadJobs();
+      loadState();
+      loadLearning();
+    });
+    row.appendChild(restore);
+    list.appendChild(row);
+  }
+}
+
+$("hiddenSearch").addEventListener("input", (e) => {
+  state.hiddenQuery = e.target.value;
+  renderHidden();
+});
+
+$("restoreAll").addEventListener("click", async () => {
+  const count = state.hidden.length;
+  if (!count) return;
+  const agreed = window.confirm(
+    `Restore all ${count} hidden posting${count === 1 ? "" : "s"}? ` +
+      "This clears their Applied and Skipped labels.",
+  );
+  if (!agreed) return;
+
+  const ok = await postAction("/api/undo", { all: true });
+  if (!ok) {
+    notice("Could not restore the hidden jobs. Try again.");
+    return;
+  }
+  notice(`Restored ${count} posting${count === 1 ? "" : "s"}.`);
+  loadHidden();
+  loadJobs();
+  loadState();
+  loadLearning();
+});
 
 /* ---------- boot ---------- */
 
