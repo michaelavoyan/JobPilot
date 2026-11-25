@@ -161,6 +161,9 @@ async function readRawBody(req: IncomingMessage, limit: number): Promise<Buffer>
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
     if (size > limit) {
+      // The rest of this body is still arriving. Discard it, or the next
+      // request on this keep-alive connection starts mid-body and hangs.
+      req.resume();
       throw Object.assign(new Error("body too large"), { status: 413 });
     }
     chunks.push(chunk as Buffer);
@@ -708,8 +711,13 @@ export function startServer(options: ServerOptions = {}) {
       json(res, 404, { error: "not found" });
     } catch (err) {
       const status = (err as { status?: number }).status ?? 500;
-      if (!res.headersSent) json(res, status, { error: (err as Error).message });
-      else res.end();
+      if (!res.headersSent) {
+        // A request we refused to read cannot share a connection with the next.
+        if (status === 413) res.setHeader("connection", "close");
+        json(res, status, { error: (err as Error).message });
+      } else {
+        res.end();
+      }
     }
   });
 
