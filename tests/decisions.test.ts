@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  clearAllDecisions,
   clearDecision,
   decisionHistory,
   listDecisions,
@@ -59,4 +60,22 @@ test("the log can be limited without losing the newest entry", () => {
   const recent = decisionHistory(db, 2);
   assert.equal(recent.length, 2);
   assert.equal(recent[0].jobId, "c");
+});
+
+test("restoring everything clears the decisions and records each one", () => {
+  const db = open(":memory:");
+  recordDecision(db, "a", "applied");
+  recordDecision(db, "b", "skipped", "too far");
+
+  assert.equal(clearAllDecisions(db), 2);
+  assert.equal(listDecisions(db).length, 0);
+
+  const cleared = decisionHistory(db).filter((h) => h.action === "cleared");
+  assert.equal(cleared.length, 2);
+  assert.ok(cleared.some((h) => h.note === "too far"), "the note survives in the log");
+});
+
+test("restoring everything when nothing is hidden is a no-op", () => {
+  const db = open(":memory:");
+  assert.equal(clearAllDecisions(db), 0);
 });

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { setConfigDir } from "../src/engine/util.ts";
-import { listDecisions, open, saveScores, upsertJobs } from "../src/storage/db.ts";
+import { decisionHistory, listDecisions, open, saveScores, upsertJobs } from "../src/storage/db.ts";
 import type { Job } from "../src/engine/types.ts";
 import { startServer } from "../src/server/server.ts";
 
@@ -282,4 +282,18 @@ test("an oversized body is refused with 413", async () => {
     body: JSON.stringify({ jobId: "x", padding: "x".repeat(1_100_000) }),
   });
   assert.equal(res.status, 413);
+});
+
+test("restore all clears every decision and keeps the log", async () => {
+  await fetch(`${base}/api/feedback`, json({ jobId: "job-1", label: "applied" }));
+  await fetch(`${base}/api/feedback`, json({ jobId: "job-2", label: "skipped" }));
+
+  const res = await fetch(`${base}/api/undo`, json({ all: true }));
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { cleared: number };
+  assert.ok(body.cleared >= 2, "both decisions were cleared");
+  assert.equal(listDecisions(db).length, 0);
+
+  const cleared = decisionHistory(db).filter((h) => h.action === "cleared");
+  assert.ok(cleared.length >= 2, "the history survives the bulk clear");
 });

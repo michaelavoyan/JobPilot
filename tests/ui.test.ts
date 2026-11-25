@@ -796,3 +796,75 @@ test("a decision that is not saved says so", async () => {
   assert.match(toast!.textContent ?? "", /Could not save/);
   dom.window.close();
 });
+
+const hiddenJobs = [
+  { jobId: "a", label: "skipped", company: "Via", title: "Mobile Team Lead", at: "x" },
+  { jobId: "b", label: "applied", company: "Taboola", title: "Data Team Lead", at: "x" },
+];
+
+test("hidden jobs can be searched before restoring one", async () => {
+  const { dom } = bootWith((url) =>
+    url.includes("/api/decisions") ? ok({ decisions: hiddenJobs }) : ok({ ok: true }),
+  );
+  await settle();
+
+  const rows = () => dom.window.document.querySelectorAll(".hidden-row").length;
+  assert.equal(rows(), 2);
+
+  const search = dom.window.document.getElementById("hiddenSearch") as HTMLInputElement;
+  search.value = "taboola";
+  search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  await settle();
+
+  assert.equal(rows(), 1);
+  assert.match(dom.window.document.querySelector(".hidden-row")!.textContent ?? "", /Taboola/);
+
+  search.value = "nothing-like-it";
+  search.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  await settle();
+  assert.equal(rows(), 0);
+  assert.match(dom.window.document.querySelector(".hidden-empty")!.textContent ?? "", /No hidden job matches/);
+  dom.window.close();
+});
+
+test("restore all asks first, then clears everything", async () => {
+  const { dom, calls } = bootWith((url) =>
+    url.includes("/api/decisions") ? ok({ decisions: hiddenJobs }) : ok({ ok: true }),
+  );
+  await settle();
+
+  let asked = "";
+  dom.window.confirm = (message?: string) => {
+    asked = String(message ?? "");
+    return true;
+  };
+
+  (dom.window.document.getElementById("restoreAll") as HTMLButtonElement).click();
+  await settle();
+
+  assert.match(asked, /Restore all 2 hidden postings/);
+  assert.match(asked, /clears their Applied and Skipped labels/);
+  assert.ok(
+    calls.some((c) => c.url.includes("/api/undo") && c.body?.includes('"all":true')),
+    "the bulk restore reaches the server",
+  );
+  dom.window.close();
+});
+
+test("restore all does nothing when the confirmation is declined", async () => {
+  const { dom, calls } = bootWith((url) =>
+    url.includes("/api/decisions") ? ok({ decisions: hiddenJobs }) : ok({ ok: true }),
+  );
+  await settle();
+
+  dom.window.confirm = () => false;
+  (dom.window.document.getElementById("restoreAll") as HTMLButtonElement).click();
+  await settle();
+
+  assert.equal(
+    calls.some((c) => c.url.includes("/api/undo")),
+    false,
+    "declining must not clear anything",
+  );
+  dom.window.close();
+});

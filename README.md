@@ -192,9 +192,10 @@ Each adds boards to the database; the next run collects from them.
 | **✓ Applied** | Saves it and clears it from the list. |
 | **✕ Skip** | Hides it from every future list. |
 
-Changed your mind? Press **Undo**, or open **hidden** below the list and bring
-any job back. Undo clears the decision from the metrics but keeps it in the
-decision log, so a choice can be explained later even after it is reversed.
+Changed your mind? Press **Undo**, or open **hidden** below the list, search it,
+and restore one — or restore everything at once. Both clear the decision from
+the metrics; the decision log keeps the record, so a choice can be explained
+later even after it is reversed.
 
 Your decisions also calibrate the scorer: from five applied and ten skipped it
 is shown where your bar actually sits, and `npm run learn` suggests a minimum

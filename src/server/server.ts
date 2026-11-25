@@ -6,6 +6,7 @@ import { basename, extname, join, resolve, sep } from "node:path";
 import { parse, stringify } from "yaml";
 import { spawn } from "node:child_process";
 import {
+  clearAllDecisions,
   clearDecision,
   countScored,
   findJobByPrefix,
@@ -587,6 +588,10 @@ export function startServer(options: ServerOptions = {}) {
 
       if (pathname === "/api/undo" && req.method === "POST") {
         const body = await readJsonBody(req);
+        if (body.all === true) {
+          json(res, 200, { ok: true, cleared: clearAllDecisions(db) });
+          return;
+        }
         const id = String(body.jobId ?? "");
         if (!id) {
           json(res, 400, { error: "jobId is required" });
@@ -707,6 +712,11 @@ export function startServer(options: ServerOptions = {}) {
       else res.end();
     }
   });
+
+  // The default 5 s idle timeout is shorter than a browser's: a reused socket
+  // can be closed mid-request and surface as ECONNRESET on the next fetch.
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
 
   server.listen(port, "127.0.0.1", () => {
     log(`JobPilot UI  →  http://127.0.0.1:${port}`);

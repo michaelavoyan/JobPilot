@@ -67,7 +67,7 @@ main {
 .drop.done { border-style: solid; border-color: #1f6f3a; }
 .muted { color: var(--muted); font-size: 12px; }
 
-input[type="text"], input[type="number"], select {
+input[type="text"], input[type="search"], input[type="number"], select {
   width: 100%; background: var(--bg); border: 1px solid var(--border);
   color: var(--text); border-radius: 9px; padding: 9px 11px; font: inherit;
 }
@@ -194,3 +194,8 @@ a.ghost { color: var(--text); border: 1px solid var(--border); border-radius: 8p
   background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
   color: var(--text); font: inherit; font-size: 12.5px; padding: 5px 9px; width: 210px;
 }
+
+.hidden-tools { display: flex; gap: 8px; margin: 8px 0; align-items: center; }
+.hidden-tools input { flex: 1; min-width: 0; }
+.hidden-tools button { white-space: nowrap; }
+.hidden-empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
