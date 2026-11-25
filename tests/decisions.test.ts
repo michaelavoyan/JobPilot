@@ -4,9 +4,14 @@ import {
   clearAllDecisions,
   clearDecision,
   decisionHistory,
+  listConstraints,
   listDecisions,
   open,
+  proposeConstraints,
   recordDecision,
+  saveScores,
+  setConstraintStatus,
+  upsertJobs,
 } from "../src/storage/db.ts";
 
 test("setting a decision is recorded in the log", () => {
@@ -78,4 +83,67 @@ test("restoring everything clears the decisions and records each one", () => {
 test("restoring everything when nothing is hidden is a no-op", () => {
   const db = open(":memory:");
   assert.equal(clearAllDecisions(db), 0);
+});
+
+function scoredJob(id: string) {
+  return {
+    id,
+    source: "test",
+    company: "Acme",
+    title: "Engineering Manager",
+    url: "",
+    locations: ["Tel Aviv"],
+    remote: true,
+    description: "Lead.",
+    lang: "en",
+    country: "IL",
+  };
+}
+
+test("restoring withdraws the proposal, keeps the confirmed rule and the score", () => {
+  const db = open(":memory:");
+  upsertJobs(db, [scoredJob("a")]);
+  saveScores(db, [{ jobId: "a", track: "b", score: 80, reasons: [], flags: [] }], "m", "h");
+  recordDecision(db, "a", "skipped", "too far and no more adtech");
+  proposeConstraints(db, [
+    { kind: "location_penalty", note: "too far", jobId: "a" },
+    { kind: "domain_penalty", value: "adtech", note: "no more adtech", jobId: "a" },
+  ]);
+  setConstraintStatus(db, "location_penalty", "confirmed");
+
+  clearDecision(db, "a");
+
+  assert.deepEqual(
+    listConstraints(db).map((c) => c.id),
+    ["location_penalty"],
+    "a proposal dies with its decision; a confirmed rule the user accepted does not",
+  );
+  const scores = db.prepare("SELECT COUNT(*) AS n FROM scores").get() as { n: number };
+  assert.equal(scores.n, 1, "restoring a decision never touches the score");
+});
+
+test("restoring everything withdraws every proposal it clears", () => {
+  const db = open(":memory:");
+  upsertJobs(db, [scoredJob("a"), scoredJob("b")]);
+  saveScores(
+    db,
+    [
+      { jobId: "a", track: "b", score: 80, reasons: [], flags: [] },
+      { jobId: "b", track: "b", score: 70, reasons: [], flags: [] },
+    ],
+    "m",
+    "h",
+  );
+  recordDecision(db, "a", "skipped", "too far");
+  recordDecision(db, "b", "applied");
+  proposeConstraints(db, [
+    { kind: "location_penalty", note: "too far", jobId: "a" },
+    { kind: "seniority_penalty", note: "too junior", jobId: "b" },
+  ]);
+  setConstraintStatus(db, "seniority_penalty", "confirmed");
+
+  assert.equal(clearAllDecisions(db), 2);
+  assert.deepEqual(listConstraints(db).map((c) => c.id), ["seniority_penalty"]);
+  const scores = db.prepare("SELECT COUNT(*) AS n FROM scores").get() as { n: number };
+  assert.equal(scores.n, 2, "scores survive a bulk restore");
 });
