@@ -4,6 +4,7 @@ import {
   finishRun,
   listBoards,
   recordAttempts,
+  recordBoardYield,
   recordPolicyRun,
   startRun,
   upsertBoards,
@@ -12,7 +13,7 @@ import { discoverFromList } from "../discover-list.ts";
 import { runCollect, runDigest, runScore } from "../pipeline.ts";
 import { join } from "node:path";
 import { backupDatabase } from "../../storage/backup.ts";
-import { configDir, log } from "../util.ts";
+import { configDir, log, nowIso, numEnv } from "../util.ts";
 import { policyVersion } from "./plan.ts";
 import type { AgentPolicy, Plan } from "./plan.ts";
 
@@ -54,6 +55,7 @@ export async function executePlan(
 ): Promise<AgentResult> {
   const d = { ...real, ...deps };
   const result: AgentResult = { boardsAdded: 0, collected: 0, scored: 0, matches: 0 };
+  const startedAt = nowIso();
   const runId = startRun(db);
   log(`backup: ${d.backup(db)}`);
   let newJobs = 0;
@@ -98,6 +100,16 @@ export async function executePlan(
       }
     }
 
+    const yields = recordBoardYield(db, {
+      at: nowIso(),
+      runStart: startedAt,
+      threshold: numEnv("MIN_SCORE", 65),
+      scored: result.scored > 0,
+    });
+    if (yields.retired.length) {
+      log(`retired ${yields.retired.length} board(s): ${yields.retired.slice(0, 5).join(", ")}`);
+    }
+
     finishRun(db, runId, {
       collected: result.collected,
       newJobs,
@@ -115,6 +127,16 @@ export async function executePlan(
     });
     return result;
   } catch (err) {
+    const yields = recordBoardYield(db, {
+      at: nowIso(),
+      runStart: startedAt,
+      threshold: numEnv("MIN_SCORE", 65),
+      scored: result.scored > 0,
+    });
+    if (yields.retired.length) {
+      log(`retired ${yields.retired.length} board(s): ${yields.retired.slice(0, 5).join(", ")}`);
+    }
+
     finishRun(db, runId, {
       collected: result.collected,
       newJobs,
