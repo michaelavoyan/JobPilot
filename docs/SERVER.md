@@ -8,14 +8,15 @@ rules see [`../AGENTS.md`](../AGENTS.md).
 ## 1. Topology
 
 ```
-        browser (127.0.0.1 only)
+        browser (127.0.0.1 / localhost only)
                 │
                 │  HTTP + one SSE stream
                 ▼
     ┌────────────────────────────┐
     │   src/server/server.ts     │
     │                            │
-    │  static files   API   SSE  │
+    │  origin guard   static     │
+    │  API            SSE        │
     └───────┬────────────┬───────┘
             │            │
             │ reads      │ spawns `cli.ts`
@@ -38,23 +39,25 @@ runs the CLI — the same command a person would type.
 ## 2. Routes
 
 ```
-  read-only                      writes                    stream
- ┌──────────────────┐   ┌────────────────────────┐   ┌────────────────┐
- │ GET /            │   │ POST /api/cv           │   │ GET /api/run   │
- │ GET /app.js      │   │      ?name=<file>      │   │   ?action=…    │
- │ GET /style.css   │   │ POST /api/market       │   │                │
- │                  │   │ POST /api/field        │   │ Server-Sent    │
- │ GET /api/state   │   │ POST /api/interests    │   │ Events:        │
- │ GET /api/jobs    │   │ POST /api/feedback     │   │   log          │
- │ GET /api/health  │   │ POST /api/undo         │   │   done         │
- │ GET /api/decisions│  │                        │   │                │
- └──────────────────┘   └────────────────────────┘   └────────────────┘
-        │                        │                            │
-        ▼                        ▼                            ▼
-   read with queries      validate, then write           spawn + stream
+  read-only                        writes                     stream
+ ┌──────────────────────┐  ┌───────────────────────────┐  ┌────────────────┐
+ │ GET /                │  │ POST /api/cv?name=<file>  │  │ GET /api/run   │
+ │ GET /app.js          │  │ POST /api/market          │  │   ?action=…    │
+ │ GET /style.css       │  │ POST /api/field           │  │                │
+ │                      │  │ POST /api/interests       │  │ Server-Sent    │
+ │ GET /api/state       │  │ POST /api/feedback        │  │ Events:        │
+ │ GET /api/jobs        │  │ POST /api/undo            │  │   log          │
+ │ GET /api/health      │  │ POST /api/discover        │  │   done         │
+ │ GET /api/decisions   │  │ POST /api/learning/       │  │                │
+ │ GET /api/learning    │  │        constraint         │  │                │
+ └──────────────────────┘  └───────────────────────────┘  └────────────────┘
+        │                             │                          │
+        ▼                             ▼                          ▼
+   read with queries          validate, then write         spawn + stream
 ```
 
-Twelve routes. Writes are only ever in response to an explicit user action.
+Fourteen API endpoints, plus three static files. Writes are only ever in
+response to an explicit user action.
 
 ---
 
@@ -68,6 +71,7 @@ Twelve routes. Writes are only ever in response to an explicit user action.
     │                      │    └─▶ 409, stop         │
     │                      │                          │
     │                      │  spawn ◀─────────────────│
+    │                      │──────────────▶ backup…   │
     │                      │──────────────▶ collect…  │
     │  event: log          │◀────── stdout ───────────│
     │◀─────────────────────│                          │
@@ -97,23 +101,38 @@ Three guarantees in that sequence:
         request
            │
            ▼
+   ┌──────────────────────────┐  no   ┌──────────────┐
+   │ host + origin + metadata │──────▶│ 403 refused  │
+   │ same-origin?             │       └──────────────┘
+   └───────────┬──────────────┘
+               │ yes
+               ▼
    ┌───────────────┐   no    ┌──────────────┐
    │ static file?  │────────▶│ /api route?  │
    └───────┬───────┘         └──────┬───────┘
            │ yes                    │ yes
            ▼                        ▼
-   path whitelisted?        method + params
-   (no traversal)            validated
-           │                        │
-           ▼                        ▼
-      send file              engine / storage
-                                  │
-                                  ▼
-                            JSON, no-store
+   path whitelisted?        method + params validated
+   (no traversal)           JSON POSTs require
+           │                 application/json
+           ▼                        │
+      send file                     ▼
+                            engine / storage
+                                   │
+                                   ▼
+                             JSON, no-store
 ```
 
-Anything else is `404`. Every JSON response carries `cache-control: no-store`,
-because the page's whole job is showing fresh results.
+Anything else is `404`. Oversized bodies are `413`. Every JSON response
+carries `cache-control: no-store`, because the page's whole job is showing
+fresh results.
+
+**The origin guard exists because `127.0.0.1` stops the network, not the
+browser.** Without it, any website could POST to the local server — and
+`GET /api/run` starts a paid run. Requests must arrive at `127.0.0.1` or
+`localhost`, `Sec-Fetch-Site` (when present) must be same-origin, and `Origin`
+(when present) must match the host. Requests without those headers — `curl`, a
+script — are allowed.
 
 ---
 
