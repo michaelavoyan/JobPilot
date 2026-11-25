@@ -292,8 +292,10 @@ progress.
 - **Caps:** `MONTHLY_CAP` on model spend, `MAX_QUERIES` on search, `MAX_BOARDS`
   on directory size.
 - **Kill switch:** `AGENT_PAUSED=1` makes `agent` a no-op with an explanation.
-- **One command forgets policy:** `npm run agent -- --reset` clears policy
-  state, experiments and the yield ledger; labels and jobs survive.
+  Two safety controls from this section are implemented now; experiments do
+  not exist until A5.
+- **One command forgets policy:** `npm run agent -- --reset` clears the plan
+  history and the yield ledger; labels, scores and jobs survive.
 - **Every action logged** in `policy_runs` with its reason, version and cost.
 
 ---

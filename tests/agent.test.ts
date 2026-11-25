@@ -2,8 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   latestBoardYield,
+  listDecisions,
   open,
   policyHistory,
+  recordBoardYield,
+  recordPolicyRun,
+  resetAgentState,
   recordAttempts,
   recordDecision,
   runHistory,
@@ -184,4 +188,28 @@ test("a failed plan is recorded as a run and a policy entry", async () => {
   assert.match(run.errors[0].message, /search offline/);
   const [entry] = policyHistory(db);
   assert.match(String(entry.result), /search offline/);
+});
+
+test("resetting the agent forgets its state and nothing of yours", () => {
+  const db = open(":memory:");
+  upsertBoards(db, [{ ats: "greenhouse", ident: "a", name: "Acme" }]);
+  upsertJobs(db, [job("m")]);
+  saveScores(db, [{ jobId: "m", track: "b", score: 80, reasons: [], flags: [] }], "m", "h");
+  recordDecision(db, "m", "applied");
+  recordPolicyRun(db, { version: "abc12345", plan: "{}", result: "{}" });
+  recordBoardYield(db, {
+    at: new Date().toISOString(),
+    runStart: new Date(Date.now() - 60_000).toISOString(),
+    threshold: 65,
+    scored: true,
+  });
+
+  const cleared = resetAgentState(db);
+  assert.ok(cleared.policies >= 1);
+  assert.ok(cleared.yields >= 1);
+  assert.equal(policyHistory(db).length, 0);
+  assert.equal(latestBoardYield(db).length, 0);
+  assert.equal(listDecisions(db).length, 1, "your labels survive");
+  const scores = db.prepare("SELECT COUNT(*) AS n FROM scores").get() as { n: number };
+  assert.equal(scores.n, 1, "your scores survive");
 });

@@ -65,7 +65,7 @@ Each release page carries the full notes:
 ## Before a release
 
 ```bash
-npm test             # typecheck + 396 tests
+npm test             # typecheck + 397 tests
 npm run health       # scheduler, last run, backups, directory
 npm run screenshot   # refresh the README image from the real UI
 ```
