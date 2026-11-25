@@ -85,7 +85,7 @@ const HELP = `JobPilot — personal job-search agent
   npm run feedback -- <id> <stage> shortlisted | applied | screening | interview
                                    | offer | rejected | skipped
   npm run funnel                   application funnel and conversion rates
-  npm run eval                     ranking quality and filter health
+  npm run eval [-- --holdout 30]   ranking quality, on a holdout when asked
   npm run stats                    database summary
   npm run schedule -- install      install the daily launchd agent
   npm run health                   scheduler, last run, backups, directory size
