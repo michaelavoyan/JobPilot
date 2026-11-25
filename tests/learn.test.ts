@@ -77,6 +77,7 @@ test("overlapping distributions never move the threshold", () => {
 test("examples are the ones nearest the middle of each group", () => {
   const db = open(":memory:");
   seed(db, "applied", [10, 80, 81, 82, 99], "a");
+  seed(db, "skipped", [40, 42, 44, 46, 48, 50, 52, 54, 56, 58], "s");
 
   const learning = buildLearning(db);
   const scores = learning.appliedExamples.map((e) => e.score).sort((a, b) => a - b);
@@ -155,11 +156,12 @@ test("examples are scoped to the track being scored", () => {
 test("shortlisted counts as a positive decision", () => {
   const db = open(":memory:");
   seed(db, "shortlisted", [80, 82, 85, 88, 90], "a");
+  seed(db, "skipped", [40, 42, 44, 46, 48, 50, 52, 54, 56, 58], "s");
   const learning = buildLearning(db);
-  assert.equal(learning.applied, 5);
+
+  assert.equal(learning.applied, 5, "shortlisted is a positive decision");
+  assert.equal(learning.enoughLabels, true, "and it opens the gate");
   assert.ok(learning.appliedExamples.length > 0);
-  // Without any skips there is nothing to separate the two groups from.
-  assert.equal(learning.suggestedMinScore, undefined);
 });
 
 /* ---------- constraints stated in notes ---------- */
@@ -350,4 +352,21 @@ test("a confirmed constraint is enough to score with learning", () => {
 
   setConstraintStatus(db, "location_penalty", "confirmed");
   assert.equal(hasLearning(buildLearning(db), ["b"]), true, "a confirmed one must reach the scorer");
+});
+
+test("a posting scored in two tracks counts once as a decision", () => {
+  const db = open(":memory:");
+  upsertJobs(db, [job("a")]);
+  saveScores(
+    db,
+    [
+      { jobId: "a", track: "b", score: 80, reasons: [], flags: [] },
+      { jobId: "a", track: "c", score: 70, reasons: [], flags: [] },
+    ],
+    "m",
+    "h",
+  );
+  recordDecision(db, "a", "applied");
+
+  assert.equal(buildLearning(db).applied, 1, "one decision, not one row per track");
 });

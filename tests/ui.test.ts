@@ -872,3 +872,20 @@ test("restore all does nothing when the confirmation is declined", async () => {
   );
   dom.window.close();
 });
+
+test("a card shows one location and keeps the rest in the tooltip", async () => {
+  const multi = [
+    {
+      ...jobs[0],
+      locations: ["Tel Aviv-Yafo, Gush Dan, Israel", "Tel Aviv, Israel - HQ"],
+    },
+  ];
+  const dom = boot({}, multi);
+  await settle();
+
+  const meta = dom.window.document.querySelector(".job-meta")!;
+  assert.match(meta.textContent ?? "", /Tel Aviv-Yafo/);
+  assert.doesNotMatch(meta.textContent ?? "", /Israel - HQ/, "the duplicate spellings are not printed");
+  assert.match((meta as HTMLElement).title, /Israel - HQ/, "but they remain available on hover");
+  dom.window.close();
+});

@@ -466,9 +466,13 @@ function renderJob(job) {
 
   const head = el("div");
   head.appendChild(el("div", "job-title", job.title));
-  // The feed often repeats one city in several spellings.
-  const where = job.remote ? "Remote" : [...new Set(job.locations || [])].join(", ") || "location n/a";
-  head.appendChild(el("div", "job-meta", `${job.company} · ${where}`));
+  // The feed often repeats one city in several spellings; the card shows one
+  // and keeps the rest in the tooltip.
+  const places = [...new Set(job.locations || [])];
+  const where = job.remote ? "Remote" : places[0] || "location n/a";
+  const meta = el("div", "job-meta", `${job.company} · ${where}`);
+  if (places.length > 1) meta.title = places.join(" · ");
+  head.appendChild(meta);
   top.appendChild(head);
   card.appendChild(top);
 

@@ -136,8 +136,9 @@ type Row = Record<string, unknown>;
 export function buildLearning(db: Db, profile?: Profile): LearningProfile {
   const rows = db
     .prepare(
-      `SELECT d.label AS label, s.track AS track, s.score AS score, s.reasons AS reasons,
-              j.title AS title, j.company AS company, j.description AS description
+      `SELECT d.label AS label, d.job_id AS jobId, s.track AS track, s.score AS score,
+              s.reasons AS reasons, j.title AS title, j.company AS company,
+              j.description AS description
        FROM decisions d
        JOIN scores s ON s.job_id = d.job_id
        JOIN jobs j ON j.id = d.job_id`,
@@ -146,6 +147,9 @@ export function buildLearning(db: Db, profile?: Profile): LearningProfile {
 
   const applied = rows.filter((r) => isPositive(String(r.label)));
   const skipped = rows.filter((r) => isNegative(String(r.label)));
+  // A posting can carry a score in two tracks; the user still made one decision.
+  const appliedJobs = new Set(applied.map((r) => String(r.jobId)));
+  const skippedJobs = new Set(skipped.map((r) => String(r.jobId)));
 
   const tracks = [...new Set(rows.map((r) => String(r.track)))].sort();
   const trackCalibration: TrackCalibration[] = tracks.map((track) => {
@@ -167,8 +171,8 @@ export function buildLearning(db: Db, profile?: Profile): LearningProfile {
 
   let suggestedMinScore: number | undefined;
   if (
-    applied.length >= MIN_APPLIED &&
-    skipped.length >= MIN_SKIPPED &&
+    appliedJobs.size >= MIN_APPLIED &&
+    skippedJobs.size >= MIN_SKIPPED &&
     appliedMedian !== undefined &&
     skippedMedian !== undefined
   ) {
@@ -208,7 +212,8 @@ export function buildLearning(db: Db, profile?: Profile): LearningProfile {
   const byTrack: Record<string, TrackExamples> = {};
   // The global gate comes first: per-track detail is a refinement of a sample
   // that is already large enough to say anything at all.
-  const enoughOverall = applied.length >= MIN_APPLIED && skipped.length >= MIN_SKIPPED;
+  const enoughOverall =
+    appliedJobs.size >= MIN_APPLIED && skippedJobs.size >= MIN_SKIPPED;
   for (const track of enoughOverall ? tracks : []) {
     const trackRows = rows.filter((r) => r.track === track);
     const trackApplied = trackRows.filter((r) => isPositive(String(r.label)));
@@ -226,16 +231,17 @@ export function buildLearning(db: Db, profile?: Profile): LearningProfile {
     profile && enoughOverall ? derivePreferences(rows, profile) : [];
 
   return {
-    applied: applied.length,
-    skipped: skipped.length,
+    applied: appliedJobs.size,
+    skipped: skippedJobs.size,
     enoughLabels: enoughOverall,
     preferences,
     constraints: listConstraints(db, "confirmed"),
     byTrack,
     trackCalibration,
     suggestedMinScore,
-    appliedExamples: pick(applied, "", MAX_EXAMPLES, MIN_APPLIED),
-    skippedExamples: pick(skipped, "", 2, MIN_SKIPPED),
+    // The gate above is counted in postings; the examples come from rows.
+    appliedExamples: enoughOverall ? pick(applied, "", MAX_EXAMPLES, 1) : [],
+    skippedExamples: enoughOverall ? pick(skipped, "", 2, 1) : [],
   };
 }
 
@@ -249,6 +255,9 @@ export function buildLearning(db: Db, profile?: Profile): LearningProfile {
 function derivePreferences(rows: Row[], profile: Profile): Preference[] {
   const applied = rows.filter((r) => isPositive(String(r.label)));
   const skipped = rows.filter((r) => isNegative(String(r.label)));
+  // A posting can carry a score in two tracks; the user still made one decision.
+  const appliedJobs = new Set(applied.map((r) => String(r.jobId)));
+  const skippedJobs = new Set(skipped.map((r) => String(r.jobId)));
   if (!applied.length || !skipped.length) return [];
 
   // Compared against the decisions that express a preference, not every row:
