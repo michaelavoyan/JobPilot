@@ -161,7 +161,8 @@ That is the whole setup.
 ### Make it run by itself
 
 ```bash
-npm run schedule -- install   # collect, score and digest daily at 07:30
+npm run schedule -- install   # decide, collect, score and digest daily at 07:30
+npm run agent -- --dry        # show today's plan and why, without acting
 npm run health                # scheduler, last run, backups, directory size
 npm run backup                # snapshot the database now
 ```

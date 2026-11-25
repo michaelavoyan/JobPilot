@@ -240,8 +240,25 @@ export function precisionAt(
  * actually reviewed, how many would you apply to? Labels only exist for jobs
  * you looked at, so this is directional rather than absolute.
  */
-export function runEval(db: Db, tracks: Track[]): void {
-  const labels = decisions(db);
+export function runEval(
+  db: Db,
+  tracks: Track[],
+  options: { holdoutDays?: number } = {},
+): void {
+  const all = decisions(db);
+  // A holdout measures only labels made after the change was in place. Anything
+  // older was available to whatever produced the scores.
+  const cutoff = options.holdoutDays
+    ? new Date(Date.now() - options.holdoutDays * 86_400_000).toISOString()
+    : undefined;
+  const labels = cutoff ? all.filter((l) => l.at >= cutoff) : all;
+  if (cutoff) {
+    log(
+      `holdout: ${labels.length} of ${all.length} labels decided since ` +
+        `${cutoff.slice(0, 10)} — older labels were visible to the scorer`,
+    );
+  }
+
   const positives = labels.filter((l) => isPositive(l.label)).length;
   const negatives = labels.filter((l) => isNegative(l.label)).length;
 
@@ -254,13 +271,16 @@ export function runEval(db: Db, tracks: Track[]): void {
     );
   }
 
-  const rows = db
-    .prepare(
-      `SELECT s.track, s.score, d.label
-       FROM scores s JOIN decisions d ON d.job_id = s.job_id
-       ORDER BY s.track, s.score DESC`,
-    )
-    .all() as Row[];
+  const recent = new Set(labels.map((l) => l.jobId));
+  const rows = (
+    db
+      .prepare(
+        `SELECT d.job_id AS jobId, s.track, s.score, d.label
+         FROM scores s JOIN decisions d ON d.job_id = s.job_id
+         ORDER BY s.track, s.score DESC`,
+      )
+      .all() as Row[]
+  ).filter((r) => !cutoff || recent.has(String(r.jobId)));
 
   if (!rows.length) {
     log("\nno scored postings have labels yet.");
@@ -298,10 +318,12 @@ export function runEval(db: Db, tracks: Track[]): void {
     }
   }
 
-  const pairs = shadowPairs(db, LEARNING_VERSION).map((p) => ({
-    ...p,
-    label: labels.find((l) => l.jobId === p.jobId)?.label,
-  }));
+  const pairs = shadowPairs(db, LEARNING_VERSION)
+    .filter((p) => !cutoff || recent.has(p.jobId))
+    .map((p) => ({
+      ...p,
+      label: labels.find((l) => l.jobId === p.jobId)?.label,
+    }));
   if (pairs.length) {
     const stats = shadowStats(pairs);
     log("\nlearning compared with baseline (same postings, scored twice):");

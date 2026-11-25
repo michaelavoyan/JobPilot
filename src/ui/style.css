@@ -170,9 +170,8 @@ a.ghost { color: var(--text); border: 1px solid var(--border); border-radius: 8p
   padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px;
 }
 .hidden-row:last-child { border-bottom: 0; }
-.hidden-stage {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
-  color: var(--muted); min-width: 76px;
+.hidden-stage-select {
+  font-size: 12px; padding: 3px 6px; min-width: 110px;
 }
 .hidden-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hidden-row button { padding: 3px 10px; font-size: 12px; }
