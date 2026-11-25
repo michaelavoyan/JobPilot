@@ -105,6 +105,9 @@ the page. Applied and skipped postings disappear from every future list.
   your decisions, with a bootstrap interval
 - **per-track precision** — the same number for each track separately
 
+Add `--holdout` and only labels made after the window are measured, so a change
+cannot be judged on the data that produced it.
+
 Below 20 labelled pairs no interval is reported; 20–49 is labelled "direction
 only". A number that looks like proof from four decisions is worse than no
 number.

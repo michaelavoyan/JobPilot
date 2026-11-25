@@ -357,6 +357,8 @@ export function runEval(
         log("  not enough labelled pairs to compare yet (need both applied and skipped)");
       }
     }
+  } else if (cutoff) {
+    log("\nno labelled shadow pairs in the holdout window yet.");
   } else {
     log("\nno shadow scoring yet. Set LEARNING_SHADOW=10 in .env to measure learning.");
   }

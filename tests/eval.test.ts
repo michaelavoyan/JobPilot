@@ -77,6 +77,10 @@ test("a holdout measures only labels made after the window", () => {
     lines.some((l) => l.includes("1/1 = 1.00")),
     "precision is computed on the recent label only",
   );
+  assert.ok(
+    lines.some((l) => l.includes("holdout window")),
+    "an empty holdout says so instead of blaming the shadow setting",
+  );
 });
 
 test("without a holdout every label counts", () => {
