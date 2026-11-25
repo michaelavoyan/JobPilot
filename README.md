@@ -132,6 +132,8 @@ every confirmed rule stays visible so you can remove it.
 It does not invent a preference you never expressed, and it never moves your
 threshold on its own — `npm run learn` tells you what it would suggest.
 
+<img src="docs/learning.png" width="720" alt="The learning section: decision counts, where the bar sits, and the measured comparison" />
+
 ---
 
 ## Getting started

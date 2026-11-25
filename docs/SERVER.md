@@ -59,6 +59,9 @@ runs the CLI — the same command a person would type.
 Fourteen API endpoints, plus three static files. Writes are only ever in
 response to an explicit user action.
 
+`POST /api/undo` takes either `{ "jobId": "…" }` or `{ "all": true }`; the
+second clears every decision in one transaction and returns the count.
+
 ---
 
 ## 3. A run, over SSE

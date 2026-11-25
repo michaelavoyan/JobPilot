@@ -10,7 +10,7 @@ import { startServer } from "../src/server/server.ts";
 import { loadEnv } from "../src/engine/util.ts";
 
 const PORT = 7791;
-const MIN_SCORE = 75;
+const MIN_SCORE = 58;
 const OUT = "docs/screenshot.png";
 
 loadEnv();
@@ -58,6 +58,13 @@ try {
 
   await page.screenshot({ path: OUT });
   console.log(`wrote ${OUT}`);
+
+  // The learning section is the part that is not a job list; show it too.
+  const learning = page.locator("#learning");
+  if ((await learning.count()) && (await learning.isVisible())) {
+    await learning.screenshot({ path: "docs/learning.png" });
+    console.log("wrote docs/learning.png");
+  }
 } finally {
   await browser.close();
   server.close();
