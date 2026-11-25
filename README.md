@@ -140,7 +140,8 @@ You need Node.js 24 or newer, and one AI key — DeepSeek, Anthropic, OpenAI or
 OpenCode Go.
 
 ```bash
-cd ~/Development/JobPilot
+git clone https://github.com/michaelavoyan/JobPilot.git
+cd JobPilot
 npm install
 npm run init -- --market il
 cp .env.example .env    # paste your AI key here
