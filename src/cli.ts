@@ -9,6 +9,7 @@ import {
   latestBoardYield,
   listBoards,
   policyHistory,
+  resetAgentState,
   listConstraints,
   runHistory,
   stats,
@@ -337,7 +338,21 @@ async function main(): Promise<void> {
     }
 
     case "agent": {
+      if (env("AGENT_PAUSED") === "1") {
+        log("agent paused: AGENT_PAUSED=1 in .env");
+        return;
+      }
+
       const db = open();
+      if (args.includes("--reset")) {
+        const cleared = resetAgentState(db);
+        log(
+          `forgot ${cleared.policies} plan(s) and ${cleared.yields} yield row(s); ` +
+            `labels, scores and jobs are untouched`,
+        );
+        return;
+      }
+
       const policy = {
         monthlyCapUsd: numEnv("AGENT_MONTHLY_CAP_USD", 5),
         minMatchesPerWeek: numEnv("AGENT_MIN_MATCHES", 3),

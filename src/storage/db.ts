@@ -834,6 +834,22 @@ export interface PolicyRecord {
   runId?: string;
 }
 
+/** Forgets the agent's own state; labels, scores and jobs survive. */
+export function resetAgentState(db: Db): { policies: number; yields: number } {
+  let policies = 0;
+  let yields = 0;
+  db.exec("BEGIN");
+  try {
+    policies = Number(db.prepare("DELETE FROM policy_runs").run().changes);
+    yields = Number(db.prepare("DELETE FROM board_yield").run().changes);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  return { policies, yields };
+}
+
 export function policyHistory(db: Db, limit = 10): PolicyRecord[] {
   return (
     db
