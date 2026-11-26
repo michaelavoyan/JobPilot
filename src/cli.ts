@@ -9,6 +9,8 @@ import {
   latestBoardYield,
   listBoards,
   policyHistory,
+  pruneSilentBoards,
+  reviveBoards,
   resetAgentState,
   listConstraints,
   runHistory,
@@ -176,6 +178,30 @@ async function main(): Promise<void> {
 
     case "boards": {
       const db = open();
+      if (args[0] === "prune") {
+        if (!provider()) {
+          fail("pruning needs a scored run: without a model key every board looks silent");
+        }
+        const sinceIndex = args.indexOf("--since");
+        const hours = sinceIndex >= 0 ? Number(args[sinceIndex + 1]) : 24;
+        if (!Number.isFinite(hours) || hours <= 0) fail("--since must be a positive number of hours");
+        const since = new Date(Date.now() - hours * 3_600_000).toISOString();
+        const result = pruneSilentBoards(db, since);
+        log(
+          `disabled ${result.disabled.length} silent board(s), kept ${result.kept} ` +
+            `that produced a scored posting`,
+        );
+        for (const name of result.disabled.slice(0, 20)) log(`  ${name}`);
+        log("revive any of them by running discovery again");
+        return;
+      }
+      if (args[0] === "revive") {
+        const all = args.includes("--all");
+        const name = args.find((a) => a !== "revive" && !a.startsWith("--"));
+        if (!all && !name) fail("usage: npm run boards -- revive --all | <name>");
+        log(`revived ${reviveBoards(db, all ? undefined : name)} board(s)`);
+        return;
+      }
       const boards = listBoards(db, false);
       if (!boards.length) {
         log("the directory is empty. Run: npm run discover-web -- --bands \"1-20\"");
