@@ -10,15 +10,20 @@ import {
   upsertBoards,
 } from "../../storage/db.ts";
 import { discoverFromList } from "../discover-list.ts";
+import { discoverCompanies, marketCities, parseBands, searchConfigured } from "../discovery.ts";
+import { loadMarket } from "../config.ts";
 import { runCollect, runDigest, runScore } from "../pipeline.ts";
 import { join } from "node:path";
 import { backupDatabase } from "../../storage/backup.ts";
-import { configDir, log, nowIso, numEnv } from "../util.ts";
+import { configDir, env, log, nowIso, numEnv } from "../util.ts";
 import { policyVersion } from "./plan.ts";
 import type { AgentPolicy, Plan } from "./plan.ts";
 
 export interface AgentDeps {
   discoverFromList: typeof discoverFromList;
+  discoverCompanies: typeof discoverCompanies;
+  searchConfigured: typeof searchConfigured;
+  loadMarket: typeof loadMarket;
   runCollect: typeof runCollect;
   runScore: typeof runScore;
   runDigest: typeof runDigest;
@@ -34,6 +39,9 @@ export interface AgentResult {
 
 const real: AgentDeps = {
   discoverFromList,
+  discoverCompanies,
+  searchConfigured,
+  loadMarket,
   runCollect,
   runScore,
   runDigest,
@@ -68,22 +76,57 @@ export async function executePlan(
     for (const action of plan.actions) {
       if (action.kind === "discover") {
         const boards = listBoards(db, false);
-        const skip = new Set([
-          ...boards.map((b) => norm(b.name)),
-          ...[...attemptedNames(db)].map(norm),
-        ]);
-        const found = await d.discoverFromList({ limit: policy.discoveryLimit, skip });
-        const fresh = found.hits.filter(
-          (h) => !boards.some((b) => b.ats === h.source && b.ident === h.ident),
-        );
-        if (fresh.length) {
-          upsertBoards(
-            db,
-            fresh.map((h) => ({ ats: h.source, ident: h.ident, name: h.name })),
+
+        if (d.searchConfigured()) {
+          // Search finds companies by query. It is the precise path and the
+          // only one that can reach boards the public lists do not name.
+          const market = d.loadMarket();
+          const found = await d.discoverCompanies({
+            market,
+            cities: marketCities(market),
+            bands: parseBands(env("AGENT_BANDS") ?? "1-20,21-100"),
+            maxQueries: numEnv("AGENT_MAX_QUERIES", 40),
+            maxBoards: policy.discoveryLimit,
+          });
+          const fresh = found.boards.filter(
+            (b) => !boards.some((x) => x.ats === b.ats && x.ident === (b.slug ?? b.uid)),
           );
+          if (fresh.length) {
+            upsertBoards(
+              db,
+              fresh.map((b) => ({
+                ats: b.ats,
+                ident: b.slug ?? b.uid!,
+                token: b.token,
+                name: b.name,
+                openRoles: b.openRoles,
+              })),
+            );
+          }
+          result.boardsAdded = fresh.length;
+          log(
+            `discovery: ${found.stats.queries} queries · ${found.stats.inBands} in band · ` +
+              `${fresh.length} new board(s)`,
+          );
+          for (const error of found.errors.slice(0, 3)) log(`  ${error}`);
+        } else {
+          const skip = new Set([
+            ...boards.map((b) => norm(b.name)),
+            ...[...attemptedNames(db)].map(norm),
+          ]);
+          const found = await d.discoverFromList({ limit: policy.discoveryLimit, skip });
+          const fresh = found.hits.filter(
+            (h) => !boards.some((b) => b.ats === h.source && b.ident === h.ident),
+          );
+          if (fresh.length) {
+            upsertBoards(
+              db,
+              fresh.map((h) => ({ ats: h.source, ident: h.ident, name: h.name })),
+            );
+          }
+          recordAttempts(db, found.checked);
+          result.boardsAdded = fresh.length;
         }
-        recordAttempts(db, found.checked);
-        result.boardsAdded = fresh.length;
       } else if (action.kind === "collect") {
         const summary = await d.runCollect(db);
         result.collected = summary.fetched;

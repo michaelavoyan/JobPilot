@@ -144,6 +144,17 @@ export async function search(query: string): Promise<string[]> {
   );
 }
 
+/** The cities a market actually names, used by both discovery paths. */
+export function marketCities(market: Market): string[] {
+  return [
+    ...new Set(
+      Object.values(market.city_aliases ?? {}).filter(
+        (v) => v !== "Remote" && v !== "Hybrid" && v.length > 2,
+      ),
+    ),
+  ];
+}
+
 export function buildQueries(market: Market, cities: string[]): string[] {
   const places = cities.length ? cities : [market.country];
   const queries: string[] = [];

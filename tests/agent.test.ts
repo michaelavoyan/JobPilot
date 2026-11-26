@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   latestBoardYield,
+  listBoards,
   listDecisions,
   open,
   policyHistory,
@@ -20,6 +21,7 @@ import type { AgentPolicy, AgentState } from "../src/engine/agent/plan.ts";
 import { agentState } from "../src/engine/agent/state.ts";
 import { executePlan } from "../src/engine/agent/execute.ts";
 import type { Job } from "../src/engine/types.ts";
+import type { Market } from "../src/engine/config.ts";
 
 const policy: AgentPolicy = { monthlyCapUsd: 5, minMatchesPerWeek: 3, discoveryLimit: 10 };
 
@@ -120,6 +122,7 @@ test("executing a plan adds boards and calls each step once", async () => {
     planDay(state({ boards: 0 }), policy),
     policy,
     {
+      searchConfigured: () => false,
       discoverFromList: async () => ({
         names: 1,
         probed: 1,
@@ -176,6 +179,7 @@ test("a failed plan is recorded as a run and a policy entry", async () => {
   await assert.rejects(
     () =>
       executePlan(db, planDay(state({ boards: 0 }), policy), policy, {
+        searchConfigured: () => false,
         discoverFromList: async () => {
           throw new Error("search offline");
         },
@@ -212,4 +216,50 @@ test("resetting the agent forgets its state and nothing of yours", () => {
   assert.equal(listDecisions(db).length, 1, "your labels survive");
   const scores = db.prepare("SELECT COUNT(*) AS n FROM scores").get() as { n: number };
   assert.equal(scores.n, 1, "your scores survive");
+});
+
+test("with a search key the plan discovers by query, not by name-guessing", async () => {
+  const db = open(":memory:");
+  const market: Market = {
+    country: "IL",
+    currency: "ILS",
+    comp_period: "month",
+    sources: {},
+    clearance_patterns: [],
+    exclude_title_patterns: [],
+    city_aliases: { "תל אביב": "Tel Aviv" },
+    currency_markers: {},
+    remote_deny_regions: [],
+  };
+
+  let keyless = false;
+  const result = await executePlan(db, planDay(state({ boards: 0 }), policy), policy, {
+    searchConfigured: () => true,
+    loadMarket: () => market,
+    discoverCompanies: async (options) => {
+      assert.deepEqual(options.cities, ["Tel Aviv"]);
+      return {
+        boards: [{ ats: "greenhouse", slug: "newco", name: "New Co", openRoles: 4 }],
+        stats: { queries: 4, urls: 9, candidates: 3, verified: 2, inBands: 1 },
+        errors: [],
+      };
+    },
+    discoverFromList: async () => {
+      keyless = true;
+      throw new Error("the keyless path must not run when a key exists");
+    },
+    runCollect: async () => ({
+      fetched: 0, inserted: 0, updated: 0, rescored: 0, errors: [], perSource: {},
+    }),
+    runScore: async () => ({
+      evaluated: 0, eligible: 0, scored: 0, failed: 0, tokensIn: 0, tokensOut: 0,
+      costUsd: 0, rejectReasons: {},
+    }),
+    runDigest: async () => ({ matches: 0, path: "out/x.md", pushed: false }),
+    backup: () => "stub-backup",
+  });
+
+  assert.equal(keyless, false);
+  assert.equal(result.boardsAdded, 1);
+  assert.deepEqual(listBoards(db).map((b) => b.name), ["New Co"]);
 });

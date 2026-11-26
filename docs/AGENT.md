@@ -226,12 +226,12 @@ otherwise                              → collect, score, digest
 
 ### A4 — Search-driven discovery (1–2 days, needs a key)
 
-**Status:** partly built. The Serper provider is implemented (2,500 free
-queries, no card) and `npm run discover-web` uses it. Its free tier rejects
-`site:` combined with quoted phrases, so queries name the ATS host as a term;
-that is weaker, so a first real run returned 91 verified boards of mixed
-relevance. Wiring search into the daily plan's `discover` action is the
-remaining step.
+**Status:** done. Serper provides 2,500 free queries without a card. When a
+search key is configured, the plan's `discover` action runs search-driven
+discovery; without one it falls back to the public name lists. Serper's free
+tier rejects `site:` combined with quoted phrases, so queries name the ATS host
+as a term — weaker, and a first real run returned 91 verified boards of mixed
+relevance. Pruning and the yield ledger handle the noise.
 
 - Generate queries from the profile: each track label × each city × ATS host.
 - Run `discover-web` inside the plan when A3 asks for it.

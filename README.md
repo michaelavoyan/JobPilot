@@ -50,9 +50,10 @@ two ways:
   Brave still works but now requires a card; Google's Custom Search API is
   closed to new customers.
 
-Boards are remembered in the database. `DISCOVER_ON_RUN=1` grows the directory
-before each run, and every company is probed only once — a name tried and found
-empty is not asked again.
+Boards are remembered in the database. With a search key, the daily plan uses
+search; without one it falls back to the public lists, where a name tried and
+found empty is not asked again. Either way, every board added is verified before
+it is collected.
 
 ### 2. Collect
 
