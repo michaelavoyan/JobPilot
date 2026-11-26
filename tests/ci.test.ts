@@ -46,3 +46,17 @@ test("a release refuses a tag that is not a complete release", () => {
   assert.match(runs, /docs\/releases/, "notes come from a committed file");
   assert.match(runs, /missing or empty/, "and their absence fails the release");
 });
+
+test("integration is manual, guarded, and the only secret reader", () => {
+  const wf = read(".github/workflows/integration.yml");
+  assert.deepEqual(Object.keys(wf.on), ["workflow_dispatch"], "never triggered by a PR");
+  assert.deepEqual(wf.permissions, { contents: "read" });
+  assert.equal(wf.jobs.live.if, "github.repository == 'michaelavoyan/JobPilot'");
+  assert.equal("env" in wf.jobs.live, false, "secrets are per step, not job-wide");
+
+  const steps = JSON.stringify(wf.jobs.live.steps);
+  assert.match(steps, /secrets\.SERPER_API_KEY/);
+  assert.match(steps, /secrets\.OPENCODE_API_KEY/);
+  assert.match(steps, /vars\.LLM_MODEL/, "the model name is a variable, not a secret");
+  assert.doesNotMatch(JSON.stringify(wf), /pull_request/, "a fork must never reach it");
+});

@@ -28,11 +28,11 @@ workflow consumes one today.**
 
 | Name | Purpose | Where it runs today | Repository secret? |
 |---|---|---|---|
-| `OPENCODE_API_KEY` | model scoring (this installation) | local `.env` | no |
+| `OPENCODE_API_KEY` | model scoring | local `.env`, `integration` workflow | **yes** |
 | `ANTHROPIC_API_KEY` | alternative provider | local `.env` | no |
 | `OPENAI_API_KEY` | alternative provider | local `.env` | no |
 | `DEEPSEEK_API_KEY` | alternative provider | local `.env` | no |
-| `SERPER_API_KEY` | search discovery | local `.env` | no |
+| `SERPER_API_KEY` | search discovery | local `.env`, `integration` workflow | **yes** |
 | `TELEGRAM_BOT_TOKEN` | optional digest push | local `.env` | no |
 | `TELEGRAM_CHAT_ID` | optional digest target | local `.env` | no |
 | `GITHUB_TOKEN` | publish a release | `release` workflow | built in, not stored |
@@ -46,9 +46,9 @@ to read them.
 
 ## 3. Current state
 
-- Repository secrets: **none**
-- Environments: **none**
-- Workflows referencing `secrets.*`: **none**
+- Repository secrets: **`SERPER_API_KEY`, `OPENCODE_API_KEY`**
+- Repository variable: **`LLM_MODEL`** (configuration, readable)
+- Workflow reading them: **`integration`**, manual only
 - CI needs none: the suite is offline
 - Release needs none: `GITHUB_TOKEN` is provided per job
 
@@ -72,13 +72,25 @@ hosted agent is a different project.
 
 ---
 
-## 5. When a secret does become necessary
+## 5. The integration workflow
 
-Only for a `integration` workflow that runs one real discovery and one scored
-pass, manually or nightly. It would need:
+`.github/workflows/integration.yml` is the only consumer. It runs manually and
+proves both external dependencies still answer:
 
-- `SERPER_API_KEY` — one or two queries
-- one model key — one small batch
+1. one search query through Serper — the result count is printed
+2. one tiny model call — the model name and output tokens are printed
+
+Nothing is written to the repository; the job starts from a fresh checkout.
+
+Run it with **Actions → integration → Run workflow**, or:
+
+```bash
+gh workflow run integration.yml
+gh run watch
+```
+
+It costs one search query and a few tokens. Secrets are passed to a single step
+each via `env`, never at job level, and the job cannot run on a pull request.
 
 ### Creation
 
@@ -92,34 +104,9 @@ back afterwards. Never commit a value, never put one in a workflow file.
 
 ### Injection pattern
 
-```yaml
-name: integration
-
-on:
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  live:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # Never on pull_request: a fork could read the keys.
-    if: github.repository == 'michaelavoyan/JobPilot'
-    environment: integration        # optional approval gate
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - name: One real discovery query
-        env:
-          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
-        run: npm run dump -- <careers-url>
-```
+The real workflow uses `workflow_dispatch`, a repository guard, per-step `env`,
+and `contents: read`. Environment approval was considered and left off: the job
+is manual and the only reader is the repository owner.
 
 Rules for the job:
 
@@ -147,11 +134,15 @@ Runbook:
 5. Run the consuming workflow with `workflow_dispatch`; verify one success.
 6. Delete the old key from the provider's list.
 
+When a key is rotated, update **both** places: `gh secret set <NAME>` for the
+workflow and the local `.env`. The workflow is the check that the new value is
+valid.
+
 ### Open item
 
-`SERPER_API_KEY` was pasted into a chat during setup. It is stored only in
-`.env`, but the chat copy should be treated as exposed: revoke and rotate at
-serper.dev when convenient.
+`SERPER_API_KEY` was pasted into a chat during setup. It is now also a
+repository secret, which does not change the advice: treat the chat copy as
+exposed and rotate at serper.dev when convenient.
 
 ---
 
