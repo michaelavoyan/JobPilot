@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   listBoards,
+  pruneSilentBoards,
+  reviveBoards,
   latestBoardYield,
   open,
   recordBoardYield,
@@ -127,4 +129,44 @@ test("the latest yield is readable for status", () => {
   });
 
   assert.equal(latestBoardYield(db).length, 2);
+});
+
+test("pruning disables only boards that produced no scored posting", () => {
+  const db = open(":memory:");
+  upsertBoards(db, [
+    { ats: "greenhouse", ident: "a", name: "Acme" },
+    { ats: "greenhouse", ident: "b", name: "Beta" },
+    { ats: "greenhouse", ident: "d", name: "Dead" },
+  ]);
+  // Old board, out of the window: left alone.
+  upsertBoards(db, [{ ats: "greenhouse", ident: "c", name: "Old" }]);
+  db.prepare("UPDATE boards SET verified_at = ? WHERE ident = 'c'").run(
+    new Date(Date.now() - 3 * 86_400_000).toISOString(),
+  );
+
+  upsertJobs(db, [job("a1", "Acme"), job("b1", "Beta")]);
+  saveScores(db, [{ jobId: "a1", track: "b", score: 80, reasons: [], flags: [] }], "m", "h");
+
+  const result = pruneSilentBoards(db, new Date(Date.now() - 3_600_000).toISOString());
+  assert.deepEqual(result.disabled.sort(), ["Beta", "Dead"]);
+  assert.equal(result.kept, 1);
+
+  const enabled = listBoards(db).map((b) => b.name).sort();
+  assert.deepEqual(enabled, ["Acme", "Old"]);
+});
+
+test("a pruned board can be revived by name or wholesale", () => {
+  const db = open(":memory:");
+  upsertBoards(db, [
+    { ats: "greenhouse", ident: "a", name: "Acme" },
+    { ats: "greenhouse", ident: "b", name: "Beta" },
+  ]);
+  pruneSilentBoards(db, new Date(Date.now() - 3_600_000).toISOString());
+  assert.equal(listBoards(db).length, 0);
+
+  assert.equal(reviveBoards(db, "acme"), 1);
+  assert.deepEqual(listBoards(db).map((b) => b.name), ["Acme"]);
+
+  assert.equal(reviveBoards(db), 1);
+  assert.equal(listBoards(db).length, 2);
 });

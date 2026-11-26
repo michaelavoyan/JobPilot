@@ -170,6 +170,8 @@ npm run schedule -- install   # decide, collect, score and digest daily at 07:30
 npm run agent -- --dry        # show today's plan and why, without acting
 npm run health                # scheduler, last run, backups, directory size
 npm run backup                # snapshot the database now
+npm run boards -- prune --since 24   # disable boards that produced nothing
+npm run boards -- revive --all      # put them back
 ```
 
 The daily run also snapshots the database first and keeps the last seven, so a

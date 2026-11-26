@@ -749,6 +749,62 @@ export interface YieldRow {
  * `matched` those at or above the threshold. Retirement is evaluated only when
  * the run actually scored something: without a key every board would look dead.
  */
+/**
+ * Disables boards verified since a cutoff that produced no scored posting.
+ * Evidence, not a guess: a board whose postings never survived the filters is
+ * not supplying this search. Reversible — discovery re-enables it.
+ */
+export function pruneSilentBoards(
+  db: Db,
+  since: string,
+): { disabled: string[]; kept: number } {
+  const rows = db
+    .prepare(
+      `SELECT b.ats AS ats, b.ident AS ident, b.name AS name,
+              (SELECT COUNT(*) FROM jobs j
+                WHERE j.source = b.ats AND j.company = b.name AND j.active = 1) AS jobs,
+              (SELECT COUNT(*) FROM scores s JOIN jobs j ON j.id = s.job_id
+                WHERE j.source = b.ats AND j.company = b.name) AS scores
+       FROM boards b
+       WHERE b.enabled = 1 AND b.verified_at >= ?`,
+    )
+    .all(since) as Row[];
+
+  const disable = db.prepare("UPDATE boards SET enabled = 0 WHERE ats = ? AND ident = ?");
+  const disabled: string[] = [];
+  let kept = 0;
+  db.exec("BEGIN");
+  try {
+    for (const row of rows) {
+      const jobs = Number(row.jobs ?? 0);
+      const scores = Number(row.scores ?? 0);
+      // A board with no postings is dead; one with postings but no scores
+      // never passed a filter. Both are silent.
+      if (jobs === 0 || scores === 0) {
+        disable.run(String(row.ats), String(row.ident));
+        disabled.push(String(row.name));
+      } else {
+        kept++;
+      }
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  return { disabled, kept };
+}
+
+/** Re-enables disabled boards, all or by a case-insensitive name match. */
+export function reviveBoards(db: Db, name?: string): number {
+  const result = name
+    ? db
+        .prepare("UPDATE boards SET enabled = 1 WHERE enabled = 0 AND lower(name) LIKE ?")
+        .run(`%${name.toLowerCase()}%`)
+    : db.prepare("UPDATE boards SET enabled = 1 WHERE enabled = 0").run();
+  return Number(result.changes);
+}
+
 export function recordBoardYield(
   db: Db,
   options: { at: string; runStart: string; threshold: number; scored: boolean; keep?: number },
