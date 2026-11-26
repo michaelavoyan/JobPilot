@@ -73,3 +73,33 @@ suite.
 - `config/`, `.env`, `runs/` and `out/` are gitignored. Nothing personal ships.
 - Every post starts at the directory in the database, never a file in the repo.
 - Tests are offline by default: no network, no model calls.
+
+## Branching and delivery (trunk-based)
+
+`main` is the trunk. It is always releasable. Work that is not ready to face
+users ships dark behind a flag, not on a branch.
+
+- **Short-lived branches.** One branch, one concern, one developer (or one
+  developer and their agents). Open the PR the same day; a day is the target,
+  two days is the limit. Merge it and delete it.
+- **No long-lived branches.** No `develop`, no release branches, no shared
+  feature branches. A release is a tag on trunk, published by the `release`
+  workflow.
+- **Red trunk is reverted first.** Revert the change that broke it, then fix it
+  forward in a new PR. Never stack new work on a red trunk.
+- **Incomplete work is flagged.** New behaviour ships behind an env or config
+  flag (`DISCOVER_ON_RUN`, `SCORE_SAMPLES`, `AGENT_PAUSED` are examples), with
+  both paths tested. Remove the flag when the feature stops being optional.
+- **Long refactors use branch by abstraction.** Add the seam in trunk, move
+  callers, delete the old path — in a sequence of small changes, not one branch
+  that lives for weeks.
+- **Schema changes are expand/contract.** Add nullable columns and new tables,
+  write both paths, migrate, then remove the old shape in a later change. Trunk
+  must start against the previous database at every commit.
+- **Small PRs.** One concern, roughly 400 changed lines or fewer excluding tests
+  and lockfiles. Separate refactoring from behaviour changes.
+- **CI is required.** `test` runs on Node 24 and 26. The admin bypass is for an
+  emergency, and an emergency is followed by a revert and a note, not by habit.
+
+The full practice, mapped to this repository, is in
+[`docs/TRUNK.md`](./docs/TRUNK.md).
