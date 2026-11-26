@@ -103,3 +103,15 @@ users ships dark behind a flag, not on a branch.
 
 The full practice, mapped to this repository, is in
 [`docs/TRUNK.md`](./docs/TRUNK.md).
+
+## Secrets
+
+- A repository secret exists only when a workflow consumes it. Nothing is
+  stored "just in case".
+- Jobs that use a secret run on `workflow_dispatch` or `main` only. Never on
+  `pull_request` or `pull_request_target`: a fork could read the value.
+- Local keys live in `.env`, which is gitignored. `.env.example` carries names
+  with empty values.
+- Configuration is not a secret. Model names, thresholds and paths stay in
+  `.env` or YAML where a maintainer can read them.
+- Rotation and incident steps are in [`docs/SECRETS.md`](./docs/SECRETS.md).

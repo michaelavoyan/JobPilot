@@ -246,6 +246,7 @@ written down in [`AGENTS.md`](./AGENTS.md) and enforced by `npm test`.
 | [`docs/LEARNING.md`](./docs/LEARNING.md) | how decisions become calibration, and how that is measured |
 | [`docs/AGENT.md`](./docs/AGENT.md) | what it would take to become an agent: outcomes, choices, autonomy |
 | [`docs/TRUNK.md`](./docs/TRUNK.md) | how changes reach `main`: short-lived branches, flags, expand/contract |
+| [`docs/SECRETS.md`](./docs/SECRETS.md) | what is a secret, where it is injected, how it is rotated |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | why it is built this way, and what would reverse it |
 | [`docs/RELEASE.md`](./docs/RELEASE.md) | how a release is cut, and what each one contained |
 
