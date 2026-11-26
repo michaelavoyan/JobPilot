@@ -1,0 +1,57 @@
+name: integration
+
+# Manual only. It spends real Serper quota and real model tokens, and it is the
+# only workflow that reads repository secrets — so it must never run on
+# `pull_request`, where a fork could read them.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration
+  cancel-in-progress: false
+
+jobs:
+  live:
+    # Belt and braces: a fork cannot dispatch in this repository anyway.
+    if: github.repository == 'michaelavoyan/JobPilot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: The search provider answers
+        env:
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+        run: |
+          node --input-type=module -e "
+            import { search } from './src/engine/discovery.ts';
+            const urls = await search('boards.greenhouse.io Tel Aviv');
+            if (!urls.length) throw new Error('search returned no results');
+            console.log('search: ' + urls.length + ' result(s)');
+          "
+
+      - name: The model answers
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+        run: |
+          if [ -z "$LLM_MODEL" ]; then
+            echo '::error::repository variable LLM_MODEL is not set'
+            exit 1
+          fi
+          node --input-type=module -e "
+            import { chat } from './src/engine/score/llm.ts';
+            const r = await chat('Reply with the single word OK.', 'OK?');
+            if (!r.text.trim()) throw new Error('model returned an empty answer');
+            console.log('model: ' + r.model + ' · ' + r.tokensOut + ' output tokens');
+          "
