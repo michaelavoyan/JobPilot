@@ -20,14 +20,24 @@ request.
    git push origin v0.2.1
    ```
 
-4. **Publish notes:**
+4. **The `release` workflow does the rest.** Pushing a `v*` tag runs it, and it
+   refuses to publish unless all four hold:
 
-   ```bash
-   gh release create v0.2.1 --title "0.2.1" --notes-file notes.md
-   ```
+   - `npm test` passes
+   - the tag equals `package.json`'s version
+   - the tagged commit is an ancestor of `main`
+   - no release with that tag exists yet
 
-5. **Verify:** the tag exists on the remote, the release page renders, and CI
-   is green at the tagged commit.
+   Then it creates the GitHub release.
+
+5. **Verify:** the run is green, the release page renders, and the notes name
+   what was and was not verified.
+
+### Release notes
+
+Commit `docs/releases/v0.2.1.md` before tagging for curated notes. Without that
+file the workflow uses GitHub's generated notes, which list merged PRs but say
+nothing about limits — so the file is the default choice.
 
 ### What the notes must contain
 
@@ -38,6 +48,15 @@ request.
 - known limits, stated plainly
 
 A release note that only lists features is incomplete.
+
+### Secrets
+
+Neither CI nor the release workflow needs a repository secret. Tests are
+offline, and publishing uses the built-in `GITHUB_TOKEN` with `contents: write`.
+
+If a live integration workflow is added later, its keys belong in **repository
+secrets** and it must run on `workflow_dispatch` or `main` only — never on
+`pull_request`, where a fork could read them.
 
 ### Rules
 
