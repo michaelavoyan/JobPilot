@@ -33,6 +33,19 @@ request.
 5. **Verify:** the run is green, the release page renders, and the notes name
    what was and was not verified.
 
+### If publication fails
+
+A `v*` tag cannot be moved or deleted (tag protection), so the fix is a
+**retry**, not a new tag:
+
+1. Fix the cause on `main` — usually a missing or empty
+   `docs/releases/<tag>.md` — and merge it.
+2. Run the `release` workflow manually with the tag as the input:
+   **Actions → release → Run workflow**.
+
+The workflow checks out the tag for the code and reads the notes from `main`, so
+the notes can be corrected without touching the tag.
+
 ### Release notes are required
 
 Commit `docs/releases/v0.2.1.md` before tagging. The workflow **fails** without

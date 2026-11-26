@@ -1,16 +1,29 @@
 name: release
 
-# Cutting a release is: bump the version in a PR, merge it, push the tag.
-# This workflow proves the tag before it becomes a published release.
+# Cutting a release is: bump the version in a PR, merge it, commit the notes,
+# push the tag. This workflow proves the tag before it becomes a release.
+#
+# It can also be started by hand with an existing tag: if publication failed,
+# the tag cannot be moved (tag protection), so the fix is a retry, not a new
+# tag.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to publish, vX.Y.Z
+        required: true
+        type: string
+
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -20,8 +33,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # The ancestry check below needs history, not a shallow clone.
+          # The ancestry check below needs history, not a shallow clone, and a
+          # manual run must check out the tag it was given.
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
@@ -33,25 +48,25 @@ jobs:
 
       - name: The tag is a release version
         run: |
-          if ! printf '%s' "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::$GITHUB_REF_NAME is not vX.Y.Z"
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::$TAG is not vX.Y.Z"
             exit 1
           fi
 
       - name: The tag matches package.json
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${TAG#v}"
           pkg="$(node -p "require('./package.json').version")"
           if [ "$tag" != "$pkg" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match package.json $pkg"
+            echo "::error::tag $TAG does not match package.json $pkg"
             exit 1
           fi
 
       - name: The tag is on main
         run: |
           git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::$GITHUB_REF_NAME is not on main"
+          if ! git merge-base --is-ancestor "${TAG}^{commit}" origin/main; then
+            echo "::error::$TAG is not on main"
             exit 1
           fi
 
@@ -59,19 +74,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "::error::release $GITHUB_REF_NAME already exists"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::release $TAG already exists"
             exit 1
           fi
 
           # Generated notes list what changed and never state what was not
-          # verified. A release must say both, so the file is required.
-          notes="docs/releases/${GITHUB_REF_NAME}.md"
-          if [ ! -s "$notes" ]; then
-            echo "::error::missing or empty $notes — see docs/releases/README.md"
+          # verified. A release must say both, so the file is required. It is
+          # read from main so a retry can fix the notes without moving the tag.
+          notes="$RUNNER_TEMP/release-notes.md"
+          if ! git show "origin/main:docs/releases/${TAG}.md" >"$notes" 2>/dev/null || [ ! -s "$notes" ]; then
+            echo "::error::missing or empty docs/releases/${TAG}.md on main — see docs/releases/README.md"
             exit 1
           fi
 
-          gh release create "$GITHUB_REF_NAME" \
-            --title "${GITHUB_REF_NAME#v}" \
+          gh release create "$TAG" \
+            --title "${TAG#v}" \
             --notes-file "$notes"
