@@ -25,6 +25,7 @@ test("a release refuses a tag that is not a complete release", () => {
   const wf = read(".github/workflows/release.yml");
   assert.deepEqual(wf.permissions, { contents: "write" });
   assert.deepEqual(wf.on.push.tags, ["v*"]);
+  assert.equal(wf.on.workflow_dispatch.inputs.tag.required, true, "a failed release can be retried");
 
   const steps = wf.jobs.release.steps as { name?: string; run?: string }[];
   const runs = steps.map((s) => s.run ?? "").join("\n");
@@ -32,6 +33,7 @@ test("a release refuses a tag that is not a complete release", () => {
   assert.match(runs, /package\.json/, "the tag must match the package version");
   assert.match(runs, /merge-base --is-ancestor/, "the tag must be on main");
   assert.match(runs, /is not on main/, "and say so when it is not");
+  assert.match(runs, /origin\/main:docs\/releases/, "notes are read from main, so a retry can fix them");
   assert.match(runs, /docs\/releases/, "notes come from a committed file");
   assert.match(runs, /missing or empty/, "and their absence fails the release");
 });
