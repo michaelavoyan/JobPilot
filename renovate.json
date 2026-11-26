@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "pinDigests": true,
   "packageRules": [
     {
       "description": "The required CI check runs the floor declared in package.json engines. Raising it is a support decision, not a dependency bump.",

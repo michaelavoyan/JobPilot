@@ -33,11 +33,22 @@ request.
 5. **Verify:** the run is green, the release page renders, and the notes name
    what was and was not verified.
 
-### Release notes
+### Release notes are required
 
-Commit `docs/releases/v0.2.1.md` before tagging for curated notes. Without that
-file the workflow uses GitHub's generated notes, which list merged PRs but say
-nothing about limits — so the file is the default choice.
+Commit `docs/releases/v0.2.1.md` before tagging. The workflow **fails** without
+it. Generated notes list what changed and never state what was not verified, and
+a release that omits its limits is incomplete.
+
+### Continuous integration
+
+| Job | Required | Purpose |
+|---|---|---|
+| `test` | yes | Node 24, the declared floor |
+| `test-next` | no | Node 26, early warning |
+| `audit` | no | `npm audit --omit=dev --audit-level=high` |
+
+The workflows run with read-only token permissions; only `release` gets
+`contents: write`. Both can be started by hand with `workflow_dispatch`.
 
 ### What the notes must contain
 
@@ -84,7 +95,7 @@ Each release page carries the full notes:
 ## Before a release
 
 ```bash
-npm test             # typecheck + 403 tests
+npm test             # typecheck + 406 tests
 npm run health       # scheduler, last run, backups, directory
 npm run screenshot   # refresh the README image from the real UI
 ```
