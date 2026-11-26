@@ -14,6 +14,15 @@ test("the required check runs the declared floor and cannot write", () => {
   assert.equal(wf.jobs.test.steps[1].with["node-version"], 24);
   assert.ok(wf.jobs["test-next"], "the newer line is watched");
   assert.ok(wf.jobs.audit, "dependency advisories are visible");
+  assert.ok(wf.jobs.size, "PR size is reported on the summary");
+});
+
+test("a large pull request is reported, never blocked", () => {
+  const wf = read(".github/workflows/test.yml");
+  const runs = (wf.jobs.size.steps as { run?: string }[]).map((s) => s.run ?? "").join("\n");
+  assert.match(runs, /400/, "the guidance is named");
+  assert.match(runs, /::warning/, "it warns");
+  assert.doesNotMatch(runs, /exit 1/, "and does not fail the build");
 });
 
 test("tests can be started by hand", () => {
