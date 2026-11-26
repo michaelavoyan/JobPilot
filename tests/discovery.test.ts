@@ -105,6 +105,6 @@ test("a Comeet board keeps its token, which the API requires", () => {
 test("queries cover every ATS for every city", () => {
   const queries = buildQueries(market, ["Tel Aviv", "Herzliya"]);
   assert.equal(queries.length, 8);
-  assert.ok(queries.some((q) => q === 'site:jobs.lever.co "Tel Aviv"'));
-  assert.ok(queries.some((q) => q === 'site:comeet.com "Herzliya"'));
+  assert.ok(queries.some((q) => q === "jobs.lever.co Tel Aviv"));
+  assert.ok(queries.some((q) => q === "comeet.com Herzliya"));
 });

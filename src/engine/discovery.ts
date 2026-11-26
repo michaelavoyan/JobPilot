@@ -149,7 +149,10 @@ export function buildQueries(market: Market, cities: string[]): string[] {
   const queries: string[] = [];
   for (const place of places) {
     for (const { host } of ATS_HOSTS) {
-      queries.push(`site:${host} "${place}"`);
+      // No `site:` and no quoting: Serper's free tier rejects queries that
+      // combine a domain with a quoted phrase. The host as a term is weaker
+      // but allowed, and the parser keeps only ATS links anyway.
+      queries.push(`${host} ${place}`);
     }
   }
   return queries;
