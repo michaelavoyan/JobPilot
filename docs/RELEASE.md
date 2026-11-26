@@ -67,7 +67,8 @@ offline, and publishing uses the built-in `GITHUB_TOKEN` with `contents: write`.
 
 If a live integration workflow is added later, its keys belong in **repository
 secrets** and it must run on `workflow_dispatch` or `main` only — never on
-`pull_request`, where a fork could read them.
+`pull_request`, where a fork could read them. The full policy is in
+[`SECRETS.md`](./SECRETS.md).
 
 ### Rules
 
