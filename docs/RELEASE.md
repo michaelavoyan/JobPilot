@@ -109,7 +109,7 @@ Each release page carries the full notes:
 ## Before a release
 
 ```bash
-npm test             # typecheck + 406 tests
+npm test             # typecheck + 407 tests
 npm run health       # scheduler, last run, backups, directory
 npm run screenshot   # refresh the README image from the real UI
 ```

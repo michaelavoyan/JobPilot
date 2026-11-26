@@ -20,7 +20,7 @@ This page maps it to JobPilot.
 | Long refactors | branch by abstraction, applied in trunk |
 | Schema evolution | expand/contract, never a flag day |
 | Red trunk | revert first, fix forward second |
-| Small review units | one concern, ~400 lines excluding tests |
+| Small review units | one concern, ~400 lines excluding tests; CI reports the number |
 
 ---
 

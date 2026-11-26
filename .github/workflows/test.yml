@@ -49,6 +49,29 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  # Trunk-based guidance, not a gate: a change that cannot be reviewed in one
+  # sitting is usually two changes. Reported on the PR summary; never blocks.
+  size:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Measure the diff
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          stats="$(git diff --numstat "origin/${{ github.base_ref }}...HEAD" -- . \
+            ':(exclude)*.lock' ':(exclude)tests/**' ':(exclude)docs/**')"
+          lines="$(printf '%s\n' "$stats" | awk 'NF==3 {a+=$1; d+=$2} END {print a+d+0}')"
+          echo "### PR size: ${lines} changed lines" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tests, lockfiles and docs excluded. Trunk-based guidance: about 400 or fewer." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$lines" -gt 400 ]; then
+            echo "::warning title=Large PR::${lines} changed lines excluding tests, lockfiles and docs; guidance is about 400"
+          fi
+
   # Advisory: a new high-severity advisory in a runtime dependency should be
   # visible on the PR that touches the lockfile, without blocking unrelated
   # work. The required check stays `test`.
