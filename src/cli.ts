@@ -33,7 +33,13 @@ import { executePlan } from "./engine/agent/execute.ts";
 import { planDay } from "./engine/agent/plan.ts";
 import { agentState } from "./engine/agent/state.ts";
 import { availableMarkets, initConfig } from "./engine/setup.ts";
-import { boardToCompany, discoverCompanies, parseBands, searchConfigured } from "./engine/discovery.ts";
+import {
+  boardToCompany,
+  discoverCompanies,
+  marketCities,
+  parseBands,
+  searchConfigured,
+} from "./engine/discovery.ts";
 import { collect, SOURCES } from "./engine/ingest/index.ts";
 import { apiUrl, getJson } from "./engine/ingest/types.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
@@ -139,13 +145,7 @@ async function main(): Promise<void> {
       const maxBoards = maxIndex >= 0 ? Number(args[maxIndex + 1]) : undefined;
 
       const market = loadMarket();
-      const cities = [
-        ...new Set(
-          Object.values(market.city_aliases).filter(
-            (v) => v !== "Remote" && v !== "Hybrid" && v.length > 2,
-          ),
-        ),
-      ];
+      const cities = marketCities(market);
 
       log(`searching ${cities.length} cities across 4 ATS platforms…`);
       const result = await discoverCompanies({ market, cities, bands, maxBoards });
