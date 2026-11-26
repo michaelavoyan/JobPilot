@@ -128,8 +128,8 @@ async function main(): Promise<void> {
       }
       if (!searchConfigured()) {
         fail(
-          "web discovery needs a search provider: set BRAVE_API_KEY, " +
-            "or GOOGLE_API_KEY + GOOGLE_CSE_ID in .env",
+          "web discovery needs a search provider: set SERPER_API_KEY (free, no card), " +
+            "BRAVE_API_KEY, or GOOGLE_API_KEY + GOOGLE_CSE_ID in .env",
         );
       }
       const bands = parseBands(bandsArg);

@@ -45,8 +45,10 @@ two ways:
 - **Without a key**, from public company lists: names become slug candidates,
   each is probed against the public ATS APIs, and a board is accepted only when
   it names the company that was asked for. Slow, but it needs no account.
-- **With a search key** (`BRAVE_API_KEY`, or `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`),
+- **With a search key** (`SERPER_API_KEY` — 2,500 free queries, no card),
   `discover-web` searches for careers pages directly. This is the precise path.
+  Brave still works but now requires a card; Google's Custom Search API is
+  closed to new customers.
 
 Boards are remembered in the database. `DISCOVER_ON_RUN=1` grows the directory
 before each run, and every company is probed only once — a name tried and found

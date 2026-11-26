@@ -226,7 +226,9 @@ otherwise                              → collect, score, digest
 
 ### A4 — Search-driven discovery (1–2 days, needs a key)
 
-**Status:** not started. Requires `BRAVE_API_KEY` or Google CSE.
+**Status:** partly built. The Serper provider is implemented (2,500 free
+queries, no card) and `npm run discover-web` can use it today; wiring search
+into the daily plan's `discover` action is the remaining step.
 
 - Generate queries from the profile: each track label × each city × ATS host.
 - Run `discover-web` inside the plan when A3 asks for it.

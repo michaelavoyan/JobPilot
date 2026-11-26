@@ -91,7 +91,11 @@ export function displayName(slug: string): string {
 }
 
 export function searchConfigured(): boolean {
-  return Boolean(env("BRAVE_API_KEY") || (env("GOOGLE_API_KEY") && env("GOOGLE_CSE_ID")));
+  return Boolean(
+    env("SERPER_API_KEY") ||
+      env("BRAVE_API_KEY") ||
+      (env("GOOGLE_API_KEY") && env("GOOGLE_CSE_ID")),
+  );
 }
 
 /** Search is pluggable because every free search API is metered. */
@@ -107,6 +111,22 @@ export async function search(query: string): Promise<string[]> {
       .filter(Boolean) ?? [];
   }
 
+  // Serper: Google results, 2,500 free queries, no card. The practical
+  // free option since Brave introduced card-only plans and Google closed the
+  // Custom Search JSON API to new customers.
+  const serper = env("SERPER_API_KEY");
+  if (serper) {
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": serper },
+      body: JSON.stringify({ q: query, num: 20 }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) throw new Error(`serper HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const data = (await res.json()) as { organic?: { link?: string }[] };
+    return (data.organic ?? []).map((r) => r.link ?? "").filter(Boolean);
+  }
+
   const key = env("GOOGLE_API_KEY");
   const cx = env("GOOGLE_CSE_ID");
   if (key && cx) {
@@ -119,7 +139,8 @@ export async function search(query: string): Promise<string[]> {
   }
 
   throw new Error(
-    "no search provider configured. Set BRAVE_API_KEY, or GOOGLE_API_KEY and GOOGLE_CSE_ID.",
+    "no search provider configured. Set SERPER_API_KEY (free, no card), " +
+      "BRAVE_API_KEY, or GOOGLE_API_KEY and GOOGLE_CSE_ID.",
   );
 }
 
